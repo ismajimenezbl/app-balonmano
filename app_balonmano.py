@@ -9,10 +9,10 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# Anchos fijos en píxeles
-ANCHO_IMG = 240
-ANCHO_DORSAL = 48
-UMBRAL_PORTERIA_Y = 320  # y < umbral => clic en portería
+# Anchos optimizados para ocupar el alto y ancho completo del viewport móvil
+ANCHO_IMG = 290
+ANCHO_DORSAL = 56
+UMBRAL_PORTERIA_Y = 380  # Umbral escalado para la altura proporcional de 290px
 
 CSS = """
 <style>
@@ -20,17 +20,17 @@ CSS = """
     footer { display: none !important; }
 
     .block-container {
-        padding: 0.2rem 0.2rem 0.4rem 0.2rem !important;
+        padding: 0.1rem 0.2rem 0.2rem 0.2rem !important;
         max-width: 100vw !important;
     }
 
     /* Contenedor global centrado */
     .st-key-registro {
-        max-width: calc(__DORSAL__px + 6px + __IMG__px) !important;
+        max-width: calc(__DORSAL__px + 8px + __IMG__px) !important;
         margin: 0 auto !important;
     }
 
-    /* Filas horizontales fijas: prohíbe que el móvil apile las columnas */
+    /* Filas horizontales fijas: sin apilar en móvil */
     .st-key-registro [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -45,7 +45,7 @@ CSS = """
         width: auto !important;
     }
 
-    /* Columna de dorsales */
+    /* Columna de dorsales (más ancha) */
     .st-key-registro [data-testid="stColumn"]:has(.st-key-dorsales),
     .st-key-registro [data-testid="column"]:has(.st-key-dorsales) {
         flex: 0 0 __DORSAL__px !important;
@@ -59,30 +59,42 @@ CSS = """
         max-width: __IMG__px !important;
     }
 
-    /* Lista vertical de dorsales con scroll independiente */
+    /* Lista vertical de dorsales con scroll completo */
     .st-key-dorsales {
-        max-height: 75vh !important;
+        max-height: 86vh !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         display: flex !important;
         flex-direction: column !important;
-        gap: 3px !important;
+        gap: 4px !important;
     }
+    
     .st-key-dorsales button {
         width: 100% !important;
-        height: 36px !important;
-        min-height: 36px !important;
+        height: 38px !important;
+        min-height: 38px !important;
         padding: 0 !important;
         font-weight: bold !important;
-        font-size: 15px !important;
+        font-size: 16px !important;
         border-radius: 6px !important;
+    }
+
+    /* BOTONES DE PORTEROS EN AMARILLO */
+    .btn-portero button {
+        background-color: #f1c40f !important;
+        color: #111111 !important;
+        border: 2px solid #d4ac0d !important;
+    }
+    .btn-portero button:hover {
+        background-color: #f39c12 !important;
+        color: #ffffff !important;
     }
 
     /* Contenedor del campo */
     .st-key-campo {
         display: flex !important;
         flex-direction: column !important;
-        gap: 3px !important;
+        gap: 4px !important;
     }
 
     /* Pulgares: 2 columnas fijas en fila */
@@ -99,9 +111,9 @@ CSS = """
     }
     .st-key-pulgares button {
         width: 100% !important;
-        height: 42px !important;
-        min-height: 42px !important;
-        font-size: 20px !important;
+        height: 48px !important;
+        min-height: 48px !important;
+        font-size: 24px !important;
         padding: 0 !important;
     }
 
@@ -119,16 +131,18 @@ CSS = """
     }
     .st-key-acciones button {
         width: 100% !important;
-        height: 36px !important;
-        min-height: 36px !important;
-        font-size: 13px !important;
+        height: 40px !important;
+        min-height: 40px !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
         padding: 0 !important;
     }
 
-    /* Iframe de la imagen */
+    /* Iframe de la imagen escalado proporcionalmente */
     .st-key-campo iframe {
-        border-radius: 6px !important;
+        border-radius: 8px !important;
         display: block !important;
+        width: __IMG__px !important;
         max-width: 100% !important;
     }
 </style>
@@ -243,20 +257,29 @@ if menu == "1. Registro en Vivo":
                     for _, row in df_j.sort_values('dorsal').iterrows():
                         es_activo = (st.session_state.jugador_activo and
                                      st.session_state.jugador_activo.get('id') == row['id'])
+                        es_portero_btn = (row['posicion'] == 'Portero')
+                        
+                        # Si es portero, se envuelve en la clase CSS amarilla
+                        if es_portero_btn:
+                            st.markdown('<div class="btn-portero">', unsafe_allow_html=True)
+                            
                         if st.button(f"{row['dorsal']}", key=f"d_{row['id']}",
                                      type="primary" if es_activo else "secondary"):
                             st.session_state.jugador_activo = row.to_dict()
                             st.rerun()
+                            
+                        if es_portero_btn:
+                            st.markdown('</div>', unsafe_allow_html=True)
 
             with c_der:
                 with st.container(key="campo"):
                     if st.session_state.jugador_activo:
                         j = st.session_state.jugador_activo
-                        st.markdown(f"<div style='font-size:12px; font-weight:bold; text-align:center;'>#{j['dorsal']} {j['nombre']}</div>",
+                        st.markdown(f"<div style='font-size:13px; font-weight:bold; text-align:center;'>#{j['dorsal']} {j['nombre']} ({j['posicion']})</div>",
                                     unsafe_allow_html=True)
                         es_portero = (j['posicion'] == 'Portero')
                     else:
-                        st.markdown("<div style='font-size:11px; color:#888; text-align:center;'>👈 Elige dorsal</div>",
+                        st.markdown("<div style='font-size:12px; color:#888; text-align:center;'>👈 Elige dorsal</div>",
                                     unsafe_allow_html=True)
                         es_portero = False
 
@@ -274,7 +297,7 @@ if menu == "1. Registro en Vivo":
                                     registrar_accion_agil("Parada" if es_portero else "Gol", id_partido_actual)
                                     st.rerun()
 
-                    # Imagen del campo
+                    # Imagen del campo dimensionada a 290px
                     try:
                         click = streamlit_image_coordinates("plantilla.jpg", key="mapa_click", width=ANCHO_IMG)
                         if click:
