@@ -9,10 +9,10 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS DEFINITIVO: LAYOUT ESTILO STEAZZI EN MÓVIL ---
+# --- CSS INQUEBRANTABLE PARA MÓVIL ---
 st.markdown("""
 <style>
-    /* Ocultar elementos sobrantes de Streamlit y reducir padding */
+    /* Ocultar elementos sobrantes */
     header { visibility: hidden !important; }
     footer { display: none !important; }
     .block-container {
@@ -21,83 +21,71 @@ st.markdown("""
         overflow-x: hidden !important;
     }
 
-    /* Contenedor principal de 2 columnas: Bloqueado horizontalmente sin salto de línea */
+    /* 1. Contenedor principal: dos columnas paralelas SIEMPRE */
     div[data-testid="stHorizontalBlock"]:has(.col-dorsales-scroll) {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 6px !important;
+        gap: 8px !important;
         width: 100% !important;
     }
 
-    /* Columna 1: Dorsales con scroll vertical independiente */
+    /* 2. Columna izquierda: 46px fijos con scroll */
     .col-dorsales-scroll {
-        width: 48px !important;
-        min-width: 48px !important;
-        max-width: 48px !important;
-        max-height: 80vh !important;
+        flex: 0 0 46px !important;
+        width: 46px !important;
+        max-height: 82vh !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         display: flex !important;
         flex-direction: column !important;
         gap: 3px !important;
-        padding-right: 2px !important;
     }
 
     .col-dorsales-scroll button {
         width: 100% !important;
-        min-height: 36px !important;
-        height: 36px !important;
+        height: 35px !important;
+        min-height: 35px !important;
         padding: 0px !important;
         font-size: 15px !important;
         font-weight: bold !important;
         border-radius: 6px !important;
     }
 
-    /* Columna 2: Panel de juego FIJO (Pulgares + Imagen + Botones) */
+    /* 3. Columna derecha: Ocupa todo el resto */
     .col-panel-juego {
         flex: 1 1 auto !important;
-        width: calc(100% - 54px) !important;
+        width: calc(100vw - 64px) !important;
+        max-width: calc(100vw - 64px) !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
+        overflow: hidden !important;
     }
 
-    /* Fila de 2 pulgares arriba de la imagen */
-    div[data-testid="stHorizontalBlock"]:has(.btn-pulgar) {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 6px !important;
+    /* 4. Forzar que las sub-columnas NUNCA se apilen verticalmente */
+    .col-panel-juego div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         width: 100% !important;
-        margin-bottom: 4px !important;
-    }
-
-    .btn-pulgar button {
-        height: 44px !important;
-        min-height: 44px !important;
-        font-size: 22px !important;
-        border-radius: 8px !important;
-    }
-
-    /* Fila de 3 botones abajo de la imagen */
-    div[data-testid="stHorizontalBlock"]:has(.btn-accion-inferior) {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr 1fr !important;
         gap: 4px !important;
+        margin: 2px 0 !important;
+    }
+
+    /* Sub-columnas dentro del panel: distribución equitativa horizontal */
+    .col-panel-juego div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        min-width: 0 !important;
+        flex: 1 1 0 !important;
+    }
+
+    .col-panel-juego button {
         width: 100% !important;
-        margin-top: 4px !important;
+        padding: 2px !important;
     }
 
-    .btn-accion-inferior button {
-        height: 36px !important;
-        min-height: 36px !important;
-        font-size: 13px !important;
-        padding: 0px !important;
-        border-radius: 6px !important;
-    }
-
-    /* Ajuste de la imagen para que encaje al ancho exacto del panel */
-    .col-panel-juego iframe, .col-panel-juego img {
+    /* Imagen ajustada al 100% sin recortar bordes */
+    .col-panel-juego iframe {
         max-width: 100% !important;
         border-radius: 8px !important;
     }
@@ -181,7 +169,7 @@ if menu == "1. Registro en Vivo":
     if df_j.empty or df_p.empty:
         st.warning("⚠️ Añade jugadores y un partido en el menú lateral.")
     else:
-        # Marcador y Reloj superior
+        # Fila superior de control
         col_sup1, col_sup2, col_sup3 = st.columns([3, 1, 1])
         with col_sup1:
             opciones_partidos = df_p['id'].astype(str) + " - vs " + df_p['rival']
@@ -195,12 +183,12 @@ if menu == "1. Registro en Vivo":
                 if st.button("⏸️", use_container_width=True): 
                     st.session_state.reloj_activo = False; st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo); st.rerun()
         with col_sup3:
-            st.markdown(f"<div style='font-size: 18px; font-weight: bold; text-align: center; line-height: 38px;'>{calcular_minuto_actual()}'</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size: 17px; font-weight: bold; text-align: center; line-height: 38px;'>{calcular_minuto_actual()}'</div>", unsafe_allow_html=True)
 
-        st.markdown("<hr style='margin: 2px 0 6px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 2px 0 4px 0;'>", unsafe_allow_html=True)
 
-        # DISTRIBUCIÓN HORIZONTAL ESTRICTA (Dorsales izq con scroll + Panel der fijo)
-        col_izq, col_der = st.columns([1, 5])
+        # DISTRIBUCIÓN HORIZONTAL ESTRICTA
+        col_izq, col_der = st.columns([1, 6])
         
         with col_izq:
             st.markdown('<div class="col-dorsales-scroll">', unsafe_allow_html=True)
@@ -214,49 +202,45 @@ if menu == "1. Registro en Vivo":
         with col_der:
             st.markdown('<div class="col-panel-juego">', unsafe_allow_html=True)
             
-            # Nombre del jugador seleccionado
+            # Nombre de jugador
             if st.session_state.jugador_activo:
                 jug = st.session_state.jugador_activo
-                st.markdown(f"<div style='font-size:13px; font-weight:bold; margin-bottom:3px;'>#{jug['dorsal']} {jug['nombre']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:13px; font-weight:bold; margin-bottom:2px; text-align:center;'>#{jug['dorsal']} {jug['nombre']}</div>", unsafe_allow_html=True)
                 es_portero = (jug['posicion'] == 'Portero')
             else:
-                st.markdown("<div style='font-size:12px; color:#888; margin-bottom:3px;'>👈 Toca un dorsal</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:12px; color:#888; margin-bottom:2px; text-align:center;'>👈 Elige dorsal</div>", unsafe_allow_html=True)
                 es_portero = False
 
-            # Fila de 2 Pulgares justo encima de la imagen
-            st.markdown('<div class="btn-pulgar">', unsafe_allow_html=True)
+            # Fila de 2 Pulgares lado a lado
             c_mal, c_bien = st.columns(2)
             with c_mal:
-                if st.button("👎", use_container_width=True):
+                if st.button("👎", key="btn_mal", use_container_width=True):
                     if st.session_state.jugador_activo:
                         registrar_accion_agil("Gol Encajado" if es_portero else "Tiro Fallado", id_partido_actual)
                         st.rerun()
             with c_bien:
-                if st.button("👍", use_container_width=True):
+                if st.button("👍", key="btn_bien", use_container_width=True):
                     if st.session_state.jugador_activo:
                         registrar_accion_agil("Parada" if es_portero else "Gol", id_partido_actual)
                         st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
             
-            # Imagen de Pista/Portería
+            # Imagen completa al ancho justo de la columna móvil
             try:
-                click = streamlit_image_coordinates("plantilla.jpg", key="mapa_movil", width=290)
+                click = streamlit_image_coordinates("plantilla.jpg", key="mapa_movil", width=260)
                 if click:
                     if click['y'] < 350: st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
                     else: st.session_state.tmp_pista = f"{click['x']},{click['y']}"
             except:
                 st.warning("Falta plantilla.jpg")
                 
-            # Fila de 3 Acciones justo debajo de la imagen
-            st.markdown('<div class="btn-accion-inferior">', unsafe_allow_html=True)
+            # Fila de 3 Acciones lado a lado
             cb1, cb2, cb3 = st.columns(3)
             with cb1: 
-                if st.button("Sanc.", use_container_width=True): menu_sanciones(id_partido_actual)
+                if st.button("Sanc.", key="btn_sanc", use_container_width=True): menu_sanciones(id_partido_actual)
             with cb2: 
-                if st.button("Ataq.", use_container_width=True): menu_ataque(id_partido_actual)
+                if st.button("Ataq.", key="btn_ataq", use_container_width=True): menu_ataque(id_partido_actual)
             with cb3: 
-                if st.button("Def.", use_container_width=True): menu_defensa(id_partido_actual)
-            st.markdown('</div>', unsafe_allow_html=True)
+                if st.button("Def.", key="btn_def", use_container_width=True): menu_defensa(id_partido_actual)
                 
             st.markdown('</div>', unsafe_allow_html=True)
 
