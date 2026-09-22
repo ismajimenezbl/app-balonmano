@@ -1,23 +1,46 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 
-# 1. Configuración de la Base de Datos Local
-conn = sqlite3.connect('balonmano_local.db')
-c = conn.cursor()
-
-# Creación de tablas si no existen
-c.execute('''CREATE TABLE IF NOT EXISTS jugadores 
-             (id INTEGER PRIMARY KEY, nombre TEXT, dorsal INTEGER, posicion TEXT)''')
-c.execute('''CREATE TABLE IF NOT EXISTS eventos 
-             (id INTEGER PRIMARY KEY, jugador_id INTEGER, accion TEXT, zona_tiro TEXT, minuto INTEGER)''')
-conn.commit()
-
-# 2. Configuración de la Interfaz
 st.set_page_config(page_title="Stats Balonmano", layout="wide")
-st.title("📊 Panel de Estadísticas - Balonmano")
+
+# 1. Conexión a Google Sheets
+@st.cache_resource
+def conectar_gsheets():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    # Carga el secreto que pusimos en Streamlit
+    creds_dict = json.loads(st.secrets["google_credentials"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # ATENCIÓN: Este debe ser el nombre exacto de tu archivo de Google Sheets
+    return client.open("Datos App Balonmano")
+
+try:
+    sheet = conectar_gsheets()
+    ws_jugadores = sheet.worksheet("jugadores")
+    ws_eventos = sheet.worksheet("eventos")
+except Exception as e:
+    st.error(f"Error conectando a Google Sheets. Comprueba que el documento se llama exactamente igual y que lo compartiste con el robot. Detalle: {e}")
+    st.stop()
+
+st.title("📊 Panel de Estadísticas - Balonmano (En la Nube)")
 
 menu = st.sidebar.selectbox("Navegación", ["1. Plantilla", "2. Registro en Vivo", "3. Estadísticas"])
+
+# Funciones auxiliares para descargar datos del Excel
+def obtener_jugadores():
+    records = ws_jugadores.get_all_records()
+    return pd.DataFrame(records)
+
+def obtener_eventos():
+    records = ws_eventos.get_all_records()
+    return pd.DataFrame(records)
 
 # --- SECCIÓN: PLANTILLA ---
 if menu == "1. Plantilla":
@@ -28,64 +51,70 @@ if menu == "1. Plantilla":
     with col3: posicion = st.selectbox("Posición", ["Portero", "Extremo Izq", "Lateral Izq", "Central", "Lateral Der", "Extremo Der", "Pivote"])
     
     if st.button("Guardar Jugador"):
-        c.execute("INSERT INTO jugadores (nombre, dorsal, posicion) VALUES (?, ?, ?)", (nombre, dorsal, posicion))
-        conn.commit()
-        st.success(f"{nombre} añadido a la plantilla.")
+        df_j = obtener_jugadores()
+        nuevo_id = 1 if df_j.empty else int(df_j['id'].max()) + 1
+        ws_jugadores.append_row([nuevo_id, nombre, dorsal, posicion])
+        st.success(f"{nombre} añadido a la plantilla en la nube.")
+        st.rerun()
         
     st.subheader("Plantilla Actual")
-    df_jugadores = pd.read_sql_query("SELECT dorsal, nombre, posicion FROM jugadores ORDER BY dorsal", conn)
-    st.dataframe(df_jugadores, use_container_width=True)
+    df_j = obtener_jugadores()
+    if not df_j.empty:
+        st.dataframe(df_j[['dorsal', 'nombre', 'posicion']].sort_values('dorsal'), use_container_width=True)
+    else:
+        st.info("No hay jugadores registrados. Añade uno arriba.")
 
 # --- SECCIÓN: REGISTRO EN VIVO ---
 elif menu == "2. Registro en Vivo":
     st.subheader("Panel del Partido")
-    jugadores = pd.read_sql_query("SELECT id, nombre, dorsal FROM jugadores", conn)
+    df_j = obtener_jugadores()
     
-    if not jugadores.empty:
+    if not df_j.empty:
         col1, col2, col3 = st.columns(3)
         with col1:
-            nombres_display = jugadores['dorsal'].astype(str) + " - " + jugadores['nombre']
+            nombres_display = df_j['dorsal'].astype(str) + " - " + df_j['nombre']
             jugador_sel = st.selectbox("Selecciona Jugador", nombres_display)
             minuto = st.number_input("Minuto de juego", min_value=1, max_value=60)
         with col2:
             accion = st.radio("Acción", ["Gol", "Tiro Fallado", "Asistencia", "Pérdida", "Parada (Solo Porteros)", "Exclusión 2 Min"])
         with col3:
-            zona = st.selectbox("Zona del campo (Opcional)", ["N/A", "6 metros", "9 metros", "Extremo", "Penalti", "Contraataque"])
+            zona = st.selectbox("Zona del campo", ["N/A", "6 metros", "9 metros", "Extremo", "Penalti", "Contraataque"])
             
         if st.button("Registrar Evento"):
-            idx = jugadores[nombres_display == jugador_sel]['id'].values[0]
-            c.execute("INSERT INTO eventos (jugador_id, accion, zona_tiro, minuto) VALUES (?, ?, ?, ?)", (int(idx), accion, zona, minuto))
-            conn.commit()
-            st.success("Acción registrada correctamente.")
+            idx = df_j[nombres_display == jugador_sel]['id'].values[0]
+            df_e = obtener_eventos()
+            nuevo_id_evento = 1 if df_e.empty else int(df_e['id'].max()) + 1
+            
+            ws_eventos.append_row([nuevo_id_evento, int(idx), accion, zona, minuto])
+            st.success("¡Acción registrada correctamente y guardada en tu Excel!")
     else:
         st.warning("Ve a la sección 'Plantilla' y añade jugadores antes de iniciar el partido.")
 
 # --- SECCIÓN: ESTADÍSTICAS ---
 elif menu == "3. Estadísticas":
     st.subheader("Rendimiento del Equipo")
-    query = """
-    SELECT j.dorsal, j.nombre, e.accion, COUNT(e.id) as total
-    FROM eventos e
-    JOIN jugadores j ON e.jugador_id = j.id
-    GROUP BY j.nombre, e.accion
-    """
-    df = pd.read_sql_query(query, conn)
+    df_j = obtener_jugadores()
+    df_e = obtener_eventos()
     
-    if not df.empty:
-        # Transformar los datos para tener las acciones en columnas
-        df_pivot = df.pivot(index=['dorsal', 'nombre'], columns='accion', values='total').fillna(0).astype(int)
+    if not df_e.empty and not df_j.empty:
+        df_merged = pd.merge(df_e, df_j, left_on='jugador_id', right_on='id', how='inner')
         
-        # Calcular porcentaje de acierto si hay tiros
-        if 'Gol' in df_pivot.columns and 'Tiro Fallado' in df_pivot.columns:
-            total_tiros = df_pivot['Gol'] + df_pivot['Tiro Fallado']
-            df_pivot['% Acierto Tiro'] = (df_pivot['Gol'] / total_tiros * 100).round(1).astype(str) + "%"
+        if not df_merged.empty:
+            resumen = df_merged.groupby(['dorsal', 'nombre', 'accion']).size().reset_index(name='total')
+            df_pivot = resumen.pivot(index=['dorsal', 'nombre'], columns='accion', values='total').fillna(0).astype(int)
             
-        st.dataframe(df_pivot, use_container_width=True)
-        
-        st.subheader("Goles por Zona de Tiro")
-        query_zonas = "SELECT zona_tiro, COUNT(*) as Goles FROM eventos WHERE accion = 'Gol' AND zona_tiro != 'N/A' GROUP BY zona_tiro"
-        df_zonas = pd.read_sql_query(query_zonas, conn)
-        if not df_zonas.empty:
-            st.bar_chart(df_zonas.set_index('zona_tiro'))
+            if 'Gol' in df_pivot.columns and 'Tiro Fallado' in df_pivot.columns:
+                total_tiros = df_pivot['Gol'] + df_pivot['Tiro Fallado']
+                df_pivot['% Acierto Tiro'] = (df_pivot['Gol'] / total_tiros * 100).round(1).astype(str) + "%"
+                
+            st.dataframe(df_pivot, use_container_width=True)
+            
+            st.subheader("Goles por Zona de Tiro")
+            goles_zona = df_merged[(df_merged['accion'] == 'Gol') & (df_merged['zona_tiro'] != 'N/A')]
+            if not goles_zona.empty:
+                conteo_zonas = goles_zona['zona_tiro'].value_counts()
+                st.bar_chart(conteo_zonas)
+        else:
+            st.info("No hay datos cruzados aún.")
     else:
         st.info("Aún no hay estadísticas registradas.")
