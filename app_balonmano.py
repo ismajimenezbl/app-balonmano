@@ -35,7 +35,7 @@ def conectar_gsheets():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(st.secrets["google_credentials"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(creds).open("Datos Balonmano")
+    return gspread.authorize(creds).open("Datos App Balonmano")
 
 try:
     sheet = conectar_gsheets()
