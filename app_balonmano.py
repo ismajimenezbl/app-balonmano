@@ -6,10 +6,12 @@ import json
 from datetime import datetime
 import time
 import altair as alt
+from streamlit_image_coordinates import streamlit_image_coordinates
+from PIL import Image, ImageDraw
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide")
 
-# --- MEMORIA DEL RELOJ (Session State) ---
+# --- MEMORIA DEL RELOJ ---
 if 'reloj_activo' not in st.session_state:
     st.session_state.reloj_activo = False
 if 'inicio_tramo' not in st.session_state:
@@ -22,7 +24,6 @@ def calcular_minuto_actual():
         total_segundos = st.session_state.tiempo_acumulado + (time.time() - st.session_state.inicio_tramo)
     else:
         total_segundos = st.session_state.tiempo_acumulado
-    # Calculamos el minuto (Ej: el segundo 65 es el minuto 2)
     return int(total_segundos // 60) + 1
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
@@ -42,8 +43,7 @@ except Exception as e:
     st.error(f"Error conectando a Google Sheets: {e}")
     st.stop()
 
-st.title("📊 Panel de Estadísticas Pro - Balonmano")
-
+st.title("📊 Panel de Estadísticas Pro - Mapas de Tiro")
 menu = st.sidebar.selectbox("Navegación", ["1. Plantilla", "2. Partidos", "3. Registro en Vivo", "4. Estadísticas"])
 
 def obtener_datos(worksheet):
@@ -71,7 +71,7 @@ if menu == "1. Plantilla":
 elif menu == "2. Partidos":
     st.subheader("Crear Nuevo Partido")
     col1, col2 = st.columns(2)
-    with col1: fecha = st.date_input("Fecha del partido", datetime.today())
+    with col1: fecha = st.date_input("Fecha", datetime.today())
     with col2: rival = st.text_input("Equipo Rival")
     if st.button("Crear Partido"):
         if rival:
@@ -92,17 +92,12 @@ elif menu == "3. Registro en Vivo":
     if df_j.empty or df_p.empty:
         st.warning("Faltan jugadores o crear un partido.")
     else:
-        # Selección de partido
         opciones_partidos = df_p['id'].astype(str) + " - vs " + df_p['rival']
         partido_sel = st.selectbox("📌 Partido actual:", opciones_partidos)
         id_partido_actual = int(partido_sel.split(" - ")[0])
-        
         st.divider()
         
-        # CONTROLES DEL RELOJ
-        st.subheader("⏱️ Cronómetro del Partido")
         col_btn1, col_btn2, col_btn3, col_metric = st.columns(4)
-        
         with col_btn1:
             if not st.session_state.reloj_activo:
                 if st.button("▶️ Iniciar / Reanudar", use_container_width=True):
@@ -110,42 +105,58 @@ elif menu == "3. Registro en Vivo":
                     st.session_state.inicio_tramo = time.time()
                     st.rerun()
             else:
-                if st.button("⏸️ Tiempo Muerto (Pausar)", use_container_width=True):
+                if st.button("⏸️ Pausar", use_container_width=True):
                     st.session_state.reloj_activo = False
                     st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo)
                     st.rerun()
-        
         with col_btn2:
-            if st.button("⏹️ Fin 1ª Parte / Reset", use_container_width=True):
+            if st.button("⏹️ Reset Reloj", use_container_width=True):
                 st.session_state.reloj_activo = False
                 st.session_state.tiempo_acumulado = 0.0
                 st.rerun()
-
         with col_metric:
             min_actual = calcular_minuto_actual()
-            estado = "EN JUEGO 🟢" if st.session_state.reloj_activo else "PAUSADO 🔴"
-            st.metric(label=f"Estado: {estado}", value=f"Minuto {min_actual}")
+            st.metric(label="Minuto", value=f"{min_actual}")
 
         st.divider()
-        
-        # REGISTRO DE ACCIONES (El minuto se pone solo)
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             nombres_display = df_j['dorsal'].astype(str) + " - " + df_j['nombre']
             jugador_sel = st.selectbox("Jugador", nombres_display)
-            # El campo minuto se rellena automáticamente con el reloj
+            accion = st.radio("Acción", ["Gol", "Tiro Fallado", "Asistencia", "Pérdida", "Parada (Porteros)", "Exclusión"])
             minuto = st.number_input("Minuto", min_value=1, max_value=120, value=min_actual)
-        with col2:
-            accion = st.radio("Acción", ["Gol", "Tiro Fallado", "Asistencia", "Pérdida", "Parada (Porteros)", "Exclusión 2 Min"])
-        with col3:
-            zona = st.selectbox("Zona", ["N/A", "6 metros", "9 metros", "Extremo", "Penalti", "Contraataque"])
+            zona = "N/A" # Lo dejamos por defecto
             
-        if st.button("Registrar Evento", type="primary"):
+        coord_pista_str, coord_porteria_str = "", ""
+        
+        if accion in ["Gol", "Tiro Fallado"]:
+            st.write("---")
+            st.write("📍 **Toca en las imágenes:**")
+            col_img1, col_img2 = st.columns(2)
+            
+            try:
+                with col_img1:
+                    st.write("1️⃣ ¿Desde dónde tira? (Pista)")
+                    coord_p = streamlit_image_coordinates("plantilla.jpg", key="pista", width=350)
+                    if coord_p:
+                        coord_pista_str = f"{coord_p['x']},{coord_p['y']}"
+                        st.caption(f"Pista guardada")
+                
+                with col_img2:
+                    st.write("2️⃣ ¿A dónde va? (Portería)")
+                    coord_g = streamlit_image_coordinates("plantilla.jpg", key="porteria", width=350)
+                    if coord_g:
+                        coord_porteria_str = f"{coord_g['x']},{coord_g['y']}"
+                        st.caption(f"Portería guardada")
+            except FileNotFoundError:
+                st.warning("⚠️ No se encontró la imagen 'plantilla.jpg' en GitHub.")
+
+        if st.button("💾 Registrar Evento", type="primary", use_container_width=True):
             idx = df_j[nombres_display == jugador_sel]['id'].values[0]
             df_e = obtener_datos(ws_eventos)
-            nuevo_id_evento = 1 if df_e.empty else int(df_e['id'].max()) + 1
-            ws_eventos.append_row([nuevo_id_evento, int(idx), accion, zona, minuto, id_partido_actual])
-            st.success(f"¡{accion} registrado en el minuto {minuto}!")
+            nuevo_id_e = 1 if df_e.empty else int(df_e['id'].max()) + 1
+            ws_eventos.append_row([nuevo_id_e, int(idx), accion, zona, minuto, id_partido_actual, coord_pista_str, coord_porteria_str])
+            st.success("¡Guardado correctamente!")
 
 # --- 4. ESTADÍSTICAS ---
 elif menu == "4. Estadísticas":
@@ -154,38 +165,44 @@ elif menu == "4. Estadísticas":
     df_p = obtener_datos(ws_partidos)
     
     if not df_e.empty and not df_j.empty and not df_p.empty:
-        opciones_filtro = ["🏆 Acumulado (Toda la temporada)"] + list(df_p['id'].astype(str) + " - vs " + df_p['rival'])
-        filtro_sel = st.selectbox("Ver estadísticas de:", opciones_filtro)
-        
+        filtro_sel = st.selectbox("Ver estadísticas de:", ["🏆 Acumulado (Toda la temporada)"] + list(df_p['id'].astype(str) + " - vs " + df_p['rival']))
         if "Acumulado" not in filtro_sel:
             id_filtro = int(filtro_sel.split(" - ")[0])
             if 'id_partido' in df_e.columns:
                 df_e = df_e[df_e['id_partido'] == id_filtro]
         
-        if df_e.empty:
-            st.info("No hay eventos registrados.")
-        else:
+        if not df_e.empty:
             df_merged = pd.merge(df_e, df_j, left_on='jugador_id', right_on='id', how='inner')
             
-            # --- CRONOLOGÍA DEL PARTIDO ---
-            if "Acumulado" not in filtro_sel:
-                st.subheader("📈 Cronología del Partido")
+            # --- MAPA DE TIRO UNIFICADO ---
+            st.subheader("🗺️ Mapa de Tiro Unificado")
+            st.write("🔴 = Goles | 🔵 = Tiros Fallados")
+            
+            try:
+                # Cargamos la imagen una sola vez
+                img_unificada = Image.open("plantilla.jpg").convert("RGBA")
+                draw = ImageDraw.Draw(img_unificada)
                 
-                # Filtramos solo acciones relevantes para la gráfica temporal
-                df_timeline = df_merged[df_merged['accion'].isin(['Gol', 'Parada (Porteros)', 'Exclusión 2 Min'])]
-                
-                if not df_timeline.empty:
-                    # Creamos un gráfico de dispersión con Altair
-                    c = alt.Chart(df_timeline).mark_circle(size=150).encode(
-                        x=alt.X('minuto:Q', title='Minuto del partido', scale=alt.Scale(domain=[0, 60])),
-                        y=alt.Y('accion:N', title=''),
-                        color=alt.Color('accion:N', legend=alt.Legend(title="Acción")),
-                        tooltip=['minuto', 'nombre', 'accion', 'zona_tiro']
-                    ).interactive().properties(height=200)
+                for index, row in df_merged.iterrows():
+                    color = "red" if row['accion'] == 'Gol' else "blue" if row['accion'] == 'Tiro Fallado' else None
                     
-                    st.altair_chart(c, use_container_width=True)
+                    if color:
+                        # Dibujar punto de la pista (origen)
+                        if pd.notna(row.get('coord_pista')) and str(row.get('coord_pista')).strip() != "":
+                            x_p, y_p = map(int, str(row['coord_pista']).split(','))
+                            draw.ellipse((x_p-12, y_p-12, x_p+12, y_p+12), fill=color, outline="white")
+                            
+                        # Dibujar punto de la portería (destino)
+                        if pd.notna(row.get('coord_porteria')) and str(row.get('coord_porteria')).strip() != "":
+                            x_g, y_g = map(int, str(row['coord_porteria']).split(','))
+                            draw.ellipse((x_g-12, y_g-12, x_g+12, y_g+12), fill=color, outline="black")
+                
+                # Mostramos la imagen gigante con todos los puntos
+                st.image(img_unificada, caption="Heatmap de Tiros (Origen y Destino)", use_container_width=True)
+            except FileNotFoundError:
+                st.info("Sube plantilla.jpg para ver el mapa unificado.")
 
-            # --- TABLA DE ESTADÍSTICAS ---
+            # --- TABLA ESTADÍSTICAS ---
             st.subheader("Rendimiento del Equipo")
             resumen = df_merged.groupby(['dorsal', 'nombre', 'accion']).size().reset_index(name='total')
             df_pivot = resumen.pivot(index=['dorsal', 'nombre'], columns='accion', values='total').fillna(0).astype(int)
