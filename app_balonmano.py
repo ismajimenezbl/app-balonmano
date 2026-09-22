@@ -9,85 +9,100 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# Anchos matemáticos para entrar en el 100% de pantallas móviles sin scroll horizontal
-ANCHO_IMG = 245
-ANCHO_DORSAL = 52
-UMBRAL_PORTERIA_Y = 320
+# --- DIMENSIONES BASE ---
+ANCHO_DORSAL = 46        # Ancho fijo columna izquierda
+ANCHO_CAMPO_PX = 230     # Ancho fijo del lienzo para evitar desbordamiento
+UMBRAL_PORTERIA_REL = 0.44  # Fracción vertical: < 44% es portería, >= 44% es pista
 
 CSS = """
 <style>
-    /* Ocultar barra superior nativa y pie de página */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
     header { display: none !important; }
     footer { display: none !important; }
 
-    /* Ajustar márgenes globales de la pantalla al mínimo */
     .block-container {
-        padding: 0.2rem 0.2rem 0.4rem 0.2rem !important;
+        padding: 0.3rem 0.2rem 0.4rem 0.2rem !important;
         max-width: 100vw !important;
-        overflow-x: hidden !important;
     }
 
-    /* Contenedor principal sin desbordamiento */
+    /* Contenedor principal */
     .st-key-registro {
         max-width: 100vw !important;
         margin: 0 auto !important;
         overflow-x: hidden !important;
     }
 
-    /* Filas horizontales fijas: prohíbe que el móvil apile las columnas */
+    /* Filas horizontales fijas: desactiva el wrap nativo de Streamlit en móviles */
     .st-key-registro [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 6px !important;
+        gap: 4px !important;
         align-items: flex-start !important;
     }
 
-    /* Columna de dorsales (izquierda) */
+    /* Anulación universal de min-width de columnas */
+    .st-key-registro [data-testid="stColumn"],
+    .st-key-registro [data-testid="column"] {
+        min-width: 0 !important;
+    }
+
+    /* Fila principal: selección por posición (compatible con todos los navegadores) */
     .st-key-registro > div[data-testid="stHorizontalBlock"] > div:first-child {
         flex: 0 0 __DORSAL__px !important;
-        min-width: __DORSAL__px !important;
-        max-width: __DORSAL__px !important;
         width: __DORSAL__px !important;
+        max-width: __DORSAL__px !important;
     }
-
-    /* Columna del campo y controles (derecha) */
     .st-key-registro > div[data-testid="stHorizontalBlock"] > div:last-child {
-        flex: 0 0 __IMG__px !important;
-        min-width: __IMG__px !important;
-        max-width: __IMG__px !important;
-        width: __IMG__px !important;
+        flex: 0 0 __CAMPO__px !important;
+        width: __CAMPO__px !important;
+        max-width: __CAMPO__px !important;
     }
 
-    /* Barra de cabecera superior */
-    .cabecera-top [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        gap: 4px !important;
+    /* Cabecera superior */
+    .st-key-cabecera [data-testid="stHorizontalBlock"] {
         align-items: center !important;
+        gap: 3px !important;
+    }
+    .st-key-cabecera [data-testid="stColumn"]:first-child,
+    .st-key-cabecera [data-testid="column"]:first-child {
+        flex: 1 1 auto !important;
+    }
+    .st-key-cabecera [data-testid="stColumn"]:not(:first-child),
+    .st-key-cabecera [data-testid="column"]:not(:first-child) {
+        flex: 0 0 38px !important;
+        width: 38px !important;
+    }
+    .st-key-cabecera button {
+        padding: 0 !important;
+        min-height: 36px !important;
+        height: 36px !important;
     }
 
-    /* Lista vertical de dorsales con scroll */
+    /* Lista vertical de dorsales */
     .st-key-dorsales {
-        max-height: 80vh !important;
+        max-height: 84vh !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         display: flex !important;
         flex-direction: column !important;
-        gap: 4px !important;
+        gap: 3px !important;
+        width: 100% !important;
     }
-
     .st-key-dorsales button {
         width: 100% !important;
-        height: 38px !important;
-        min-height: 38px !important;
+        height: 36px !important;
+        min-height: 36px !important;
         padding: 0 !important;
         font-weight: bold !important;
-        font-size: 16px !important;
+        font-size: 15px !important;
         border-radius: 6px !important;
     }
 
-    /* ESTILO AMARILLO PARA PORTEROS */
+    /* Porteros en amarillo */
     div[class*="st-key-portero_"] button {
         background-color: #facc15 !important;
         color: #000000 !important;
@@ -95,84 +110,59 @@ CSS = """
         border: 2px solid #ca8a04 !important;
     }
 
-    /* Banner informativo del jugador */
+    /* Cartel del jugador activo */
     .banner-jugador {
         width: 100%;
         text-align: center;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: bold;
-        padding: 5px 4px;
-        margin-bottom: 4px;
-        border-radius: 6px;
+        padding: 4px 2px;
+        border-radius: 5px;
         box-sizing: border-box;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
-    .banner-jugador.activo {
-        background-color: #1e3a8a;
-        color: #ffffff;
-        border: 1px solid #3b82f6;
-    }
-    .banner-jugador.inactivo {
-        background-color: #1f2937;
-        color: #9ca3af;
-        border: 1px dashed #374151;
-    }
+    .banner-jugador.activo { background-color: #1e3a8a; color: #ffffff; border: 1px solid #3b82f6; }
+    .banner-jugador.inactivo { background-color: #1f2937; color: #9ca3af; border: 1px dashed #374151; }
 
-    /* Pulgares: 2 columnas fijas en fila */
-    .st-key-pulgares [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        gap: 6px !important;
-        width: 100% !important;
-        margin-bottom: 4px !important;
-    }
+    .st-key-campo { gap: 3px !important; }
+    .st-key-registro [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
+
+    /* Pulgares */
+    .st-key-pulgares [data-testid="stHorizontalBlock"] { gap: 4px !important; margin-bottom: 2px !important; }
     .st-key-pulgares [data-testid="stColumn"],
-    .st-key-pulgares [data-testid="column"] {
-        flex: 1 1 50% !important;
-        width: 50% !important;
-        min-width: 0 !important;
-    }
+    .st-key-pulgares [data-testid="column"] { flex: 1 1 50% !important; width: 50% !important; }
     .st-key-pulgares button {
-        width: 100% !important;
-        height: 44px !important;
-        min-height: 44px !important;
+        height: 42px !important;
+        min-height: 42px !important;
         font-size: 22px !important;
         padding: 0 !important;
     }
 
-    /* Acciones: 3 columnas fijas en fila */
-    .st-key-acciones [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        gap: 4px !important;
-        width: 100% !important;
-        margin-top: 4px !important;
-    }
+    /* Botones de acción inferiores */
+    .st-key-acciones [data-testid="stHorizontalBlock"] { gap: 3px !important; margin-top: 2px !important; }
     .st-key-acciones [data-testid="stColumn"],
-    .st-key-acciones [data-testid="column"] {
-        flex: 1 1 33.33% !important;
-        width: 33.33% !important;
-        min-width: 0 !important;
-    }
+    .st-key-acciones [data-testid="column"] { flex: 1 1 33.33% !important; width: 33.33% !important; }
     .st-key-acciones button {
-        width: 100% !important;
-        height: 38px !important;
-        min-height: 38px !important;
-        font-size: 13px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        font-size: 12px !important;
         font-weight: 600 !important;
         padding: 0 !important;
     }
 
-    /* Iframe de la imagen del campo */
+    /* Iframe del mapa */
     .st-key-campo iframe {
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         display: block !important;
-        width: __IMG__px !important;
+        width: __CAMPO__px !important;
         max-width: 100% !important;
     }
 </style>
 """
 
-st.markdown(CSS.replace("__IMG__", str(ANCHO_IMG)).replace("__DORSAL__", str(ANCHO_DORSAL)), unsafe_allow_html=True)
+st.markdown(CSS.replace("__CAMPO__", str(ANCHO_CAMPO_PX)).replace("__DORSAL__", str(ANCHO_DORSAL)), unsafe_allow_html=True)
 
 # --- ESTADO (SESSION STATE) ---
 if 'seccion_actual' not in st.session_state: st.session_state.seccion_actual = "1. Registro en Vivo"
@@ -224,7 +214,7 @@ def registrar_accion_agil(accion, id_partido):
     st.session_state.tmp_porteria = ""
     st.toast(f"✅ Guardado: {accion}", icon="✅")
 
-# --- MENÚ DE NAVEGACIÓN HAMBURGUESA (POP-UP) ---
+# --- MENÚ DE NAVEGACIÓN HAMBURGUESA ---
 @st.dialog("Navegación")
 def abrir_menu_navegacion():
     opciones = [
@@ -234,11 +224,12 @@ def abrir_menu_navegacion():
         ("📊 Estadísticas", "4. Estadísticas")
     ]
     for texto, seccion in opciones:
-        if st.button(texto, use_container_width=True, type="primary" if st.session_state.seccion_actual == seccion else "secondary"):
+        if st.button(texto, use_container_width=True,
+                     type="primary" if st.session_state.seccion_actual == seccion else "secondary"):
             st.session_state.seccion_actual = seccion
             st.rerun()
 
-# --- POP-UPS NATIVOS DE ACCIONES ---
+# --- POP-UPS DE ACCIONES ---
 @st.dialog("Sanciones")
 def menu_sanciones(id_partido):
     c1, c2, c3 = st.columns(3)
@@ -256,54 +247,52 @@ def menu_defensa(id_partido):
     for acc in ["7m en contra", "Duelo perdido", "Falta", "Intercepción"]:
         if st.button(acc, use_container_width=True): registrar_accion_agil(acc, id_partido); st.rerun()
 
-# --- SECCIÓN: 1. REGISTRO EN VIVO ---
+# --- 1. REGISTRO EN VIVO ---
 if st.session_state.seccion_actual == "1. Registro en Vivo":
     df_j = obtener_datos("jugadores")
     df_p = obtener_datos("partidos")
 
     if df_j.empty or df_p.empty:
         st.warning("⚠️ Añade plantilla y partidos primero.")
-        if st.button("Ir al menú de opciones"):
-            abrir_menu_navegacion()
+        if st.button("Abrir Menú"): abrir_menu_navegacion()
     else:
         with st.container(key="registro"):
-            # Cabecera superior: Selector de partido | Play/Pausa | Minuto | Menú Hamburguesa
-            st.markdown('<div class="cabecera-top">', unsafe_allow_html=True)
-            c_sup1, c_sup2, c_sup3, c_sup4 = st.columns([4, 1.2, 1.2, 1.2])
-            with c_sup1:
-                id_partido_actual = int(st.selectbox(
-                    "P:", df_p['id'].astype(str) + " - " + df_p['rival'],
-                    label_visibility="collapsed").split(" - ")[0])
-            with c_sup2:
-                if not st.session_state.reloj_activo:
-                    if st.button("▶️", use_container_width=True):
-                        st.session_state.reloj_activo = True; st.session_state.inicio_tramo = time.time(); st.rerun()
-                else:
-                    if st.button("⏸️", use_container_width=True):
-                        st.session_state.reloj_activo = False
-                        st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo)
-                        st.rerun()
-            with c_sup3:
-                st.markdown(f"<div style='font-size:15px; font-weight:bold; line-height:36px; text-align:center;'>{calcular_minuto_actual()}'</div>", unsafe_allow_html=True)
-            with c_sup4:
-                # Botón de menú hamburguesa
-                if st.button("☰", use_container_width=True):
-                    abrir_menu_navegacion()
-            st.markdown('</div>', unsafe_allow_html=True)
+            # Barra superior
+            with st.container(key="cabecera"):
+                c_sup1, c_sup2, c_sup3, c_sup4 = st.columns([3.5, 1.2, 1.2, 1.1])
+                with c_sup1:
+                    id_partido_actual = int(st.selectbox(
+                        "P:", df_p['id'].astype(str) + " - " + df_p['rival'],
+                        label_visibility="collapsed").split(" - ")[0])
+                with c_sup2:
+                    if not st.session_state.reloj_activo:
+                        if st.button("▶️", use_container_width=True):
+                            st.session_state.reloj_activo = True
+                            st.session_state.inicio_tramo = time.time()
+                            st.rerun()
+                    else:
+                        if st.button("⏸️", use_container_width=True):
+                            st.session_state.reloj_activo = False
+                            st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo)
+                            st.rerun()
+                with c_sup3:
+                    st.markdown(f"<div style='font-size:14px; font-weight:bold; text-align:center;'>{calcular_minuto_actual()}'</div>",
+                                unsafe_allow_html=True)
+                with c_sup4:
+                    if st.button("☰", use_container_width=True):
+                        abrir_menu_navegacion()
 
             st.markdown("<hr style='margin: 2px 0 4px 0;'>", unsafe_allow_html=True)
 
-            # Bloque principal de juego: Dorsales | Campo y botones
-            c_izq, c_der = st.columns([1, 5])
+            # Fila principal (dorsales + controles)
+            c_izq, c_der = st.columns([1, 4])
 
             with c_izq:
                 with st.container(key="dorsales"):
                     for _, row in df_j.sort_values('dorsal').iterrows():
                         es_activo = (st.session_state.jugador_activo and
                                      st.session_state.jugador_activo.get('id') == row['id'])
-                        es_portero = (row['posicion'] == 'Portero')
-                        
-                        prefijo = "portero" if es_portero else "jugador"
+                        prefijo = "portero" if row['posicion'] == 'Portero' else "jugador"
                         with st.container(key=f"{prefijo}_{row['id']}"):
                             if st.button(f"{row['dorsal']}", key=f"d_{row['id']}",
                                          type="primary" if es_activo else "secondary"):
@@ -315,10 +304,12 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
                     if st.session_state.jugador_activo:
                         j = st.session_state.jugador_activo
                         es_portero_activo = (j['posicion'] == 'Portero')
-                        st.markdown(f'<div class="banner-jugador activo">#{j["dorsal"]} {j["nombre"]} ({j["posicion"]})</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="banner-jugador activo">#{j["dorsal"]} {j["nombre"]} ({j["posicion"]})</div>',
+                                    unsafe_allow_html=True)
                     else:
                         es_portero_activo = False
-                        st.markdown('<div class="banner-jugador inactivo">👈 Elige un dorsal</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="banner-jugador inactivo">👈 Elige un dorsal</div>',
+                                    unsafe_allow_html=True)
 
                     with st.container(key="pulgares"):
                         cp1, cp2 = st.columns(2)
@@ -333,13 +324,17 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
                                     registrar_accion_agil("Parada" if es_portero_activo else "Gol", id_partido_actual)
                                     st.rerun()
 
+                    # Imagen con coordenadas relativas porcentuales (0-100%)
                     try:
-                        click = streamlit_image_coordinates("plantilla.jpg", key="mapa_click", width=ANCHO_IMG)
-                        if click:
-                            if click['y'] < UMBRAL_PORTERIA_Y:
-                                st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
+                        click = streamlit_image_coordinates("plantilla.jpg", key="mapa_click", width=ANCHO_CAMPO_PX)
+                        if click and click.get('width') and click.get('height'):
+                            x_rel = click['x'] / click['width']
+                            y_rel = click['y'] / click['height']
+                            coord = f"{x_rel * 100:.1f},{y_rel * 100:.1f}"
+                            if y_rel < UMBRAL_PORTERIA_REL:
+                                st.session_state.tmp_porteria = coord
                             else:
-                                st.session_state.tmp_pista = f"{click['x']},{click['y']}"
+                                st.session_state.tmp_pista = coord
                     except Exception:
                         st.warning("Falta plantilla.jpg")
 
@@ -352,13 +347,13 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
                         with ca3:
                             if st.button("Def.", use_container_width=True): menu_defensa(id_partido_actual)
 
-# --- SECCIÓN: 2. PARTIDOS ---
+# --- 2. PARTIDOS ---
 elif st.session_state.seccion_actual == "2. Partidos":
     col_t, col_b = st.columns([5, 1])
     with col_t: st.subheader("Gestión de Partidos")
     with col_b:
         if st.button("☰", use_container_width=True): abrir_menu_navegacion()
-        
+
     c1, c2 = st.columns(2)
     with c1: fecha = st.date_input("Fecha", datetime.today())
     with c2: rival = st.text_input("Rival")
@@ -374,13 +369,13 @@ elif st.session_state.seccion_actual == "2. Partidos":
     df_p = obtener_datos("partidos")
     if not df_p.empty: st.dataframe(df_p, use_container_width=True)
 
-# --- SECCIÓN: 3. PLANTILLA ---
+# --- 3. PLANTILLA ---
 elif st.session_state.seccion_actual == "3. Plantilla":
     col_t, col_b = st.columns([5, 1])
     with col_t: st.subheader("Gestión de Plantilla")
     with col_b:
         if st.button("☰", use_container_width=True): abrir_menu_navegacion()
-        
+
     c1, c2, c3 = st.columns(3)
     with c1: nombre = st.text_input("Nombre")
     with c2: dorsal = st.number_input("Dorsal", min_value=1, max_value=99)
@@ -395,13 +390,13 @@ elif st.session_state.seccion_actual == "3. Plantilla":
     df_j = obtener_datos("jugadores")
     if not df_j.empty: st.dataframe(df_j[['dorsal', 'nombre', 'posicion']].sort_values('dorsal'), use_container_width=True)
 
-# --- SECCIÓN: 4. ESTADÍSTICAS ---
+# --- 4. ESTADÍSTICAS ---
 elif st.session_state.seccion_actual == "4. Estadísticas":
     col_t, col_b = st.columns([5, 1])
     with col_t: st.subheader("Estadísticas del Equipo")
     with col_b:
         if st.button("☰", use_container_width=True): abrir_menu_navegacion()
-        
+
     df_j = obtener_datos("jugadores")
     df_e = obtener_datos("eventos")
     df_p = obtener_datos("partidos")
