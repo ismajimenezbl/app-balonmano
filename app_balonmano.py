@@ -8,7 +8,8 @@ import time
 from streamlit_image_coordinates import streamlit_image_coordinates
 from PIL import Image, ImageDraw
 
-st.set_page_config(page_title="Stats Balonmano", layout="wide")
+# Configuración para móvil
+st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
 # --- MEMORIA (SESSION STATE) ---
 if 'reloj_activo' not in st.session_state: st.session_state.reloj_activo = False
@@ -18,7 +19,6 @@ if 'tiempo_acumulado' not in st.session_state: st.session_state.tiempo_acumulado
 if 'jugador_activo' not in st.session_state: st.session_state.jugador_activo = None
 if 'tmp_pista' not in st.session_state: st.session_state.tmp_pista = ""
 if 'tmp_porteria' not in st.session_state: st.session_state.tmp_porteria = ""
-if 'ultimo_click' not in st.session_state: st.session_state.ultimo_click = None
 
 def calcular_minuto_actual():
     if st.session_state.reloj_activo:
@@ -46,17 +46,18 @@ def obtener_datos(nombre_hoja):
     ws = sheet.worksheet(nombre_hoja)
     return pd.DataFrame(ws.get_all_records())
 
-st.title("📊 Panel de Estadísticas Pro - Modo Ágil")
-menu = st.sidebar.selectbox("Navegación", ["1. Plantilla", "2. Partidos", "3. Registro en Vivo", "4. Estadísticas"])
-
+# Función para guardar datos limpia y rápida
 def registrar_accion_agil(accion, id_partido, zona="N/A"):
+    if not st.session_state.jugador_activo:
+        st.toast("⚠️ Selecciona un jugador primero", icon="⚠️")
+        return
+        
     idx = st.session_state.jugador_activo['id']
     minuto = calcular_minuto_actual()
     df_e = obtener_datos("eventos")
     nuevo_id_e = 1 if df_e.empty else int(df_e['id'].max()) + 1
     
-    ws_eventos = sheet.worksheet("eventos")
-    ws_eventos.append_row([
+    sheet.worksheet("eventos").append_row([
         nuevo_id_e, int(idx), accion, zona, minuto, id_partido, 
         st.session_state.tmp_pista, st.session_state.tmp_porteria
     ])
@@ -65,11 +66,138 @@ def registrar_accion_agil(accion, id_partido, zona="N/A"):
     st.session_state.jugador_activo = None
     st.session_state.tmp_pista = ""
     st.session_state.tmp_porteria = ""
-    st.session_state.ultimo_click = None
-    st.toast(f"✅ {accion} registrada con éxito", icon="✅")
+    st.toast(f"✅ {accion} guardado", icon="✅")
 
-# --- 1. PLANTILLA ---
-if menu == "1. Plantilla":
+# --- MENÚS POP-UP (FLOTANTES) ---
+@st.dialog("Sanciones")
+def menu_sanciones(id_partido):
+    c1, c2, c3 = st.columns(3)
+    if c1.button("🟨 Amarilla", use_container_width=True): 
+        registrar_accion_agil("Amarilla", id_partido)
+        st.rerun()
+    if c2.button("✌️ 2 Minutos", use_container_width=True): 
+        registrar_accion_agil("Exclusión 2 Min", id_partido)
+        st.rerun()
+    if c3.button("🟥 Roja", type="primary", use_container_width=True): 
+        registrar_accion_agil("Tarjeta Roja", id_partido)
+        st.rerun()
+
+@st.dialog("Ataque")
+def menu_ataque(id_partido):
+    acciones = ["Pasos", "Doble regate", "Falta en ataque", "Pérdida de balón", "Falta", "Tiro bloqueado", "2 mins provocados", "7m provocado", "Duelo ganado"]
+    cols = st.columns(3)
+    for i, acc in enumerate(acciones):
+        if cols[i % 3].button(acc, use_container_width=True):
+            registrar_accion_agil(acc, id_partido)
+            st.rerun()
+
+@st.dialog("Defensa")
+def menu_defensa(id_partido):
+    acciones = ["7m en contra", "Duelo perdido", "Falta", "Tiro bloqueado", "Falta en ataque", "Intercepción"]
+    cols = st.columns(3)
+    for i, acc in enumerate(acciones):
+        if cols[i % 3].button(acc, use_container_width=True):
+            registrar_accion_agil(acc, id_partido)
+            st.rerun()
+
+# --- NAVEGACIÓN ---
+menu = st.sidebar.selectbox("Navegación", ["1. Registro en Vivo", "2. Plantilla", "3. Partidos", "4. Estadísticas"])
+
+# --- 1. REGISTRO EN VIVO (LA PANTALLA PRINCIPAL) ---
+if menu == "1. Registro en Vivo":
+    df_j = obtener_datos("jugadores")
+    df_p = obtener_datos("partidos")
+    
+    if df_j.empty or df_p.empty:
+        st.warning("Ve al menú lateral para añadir jugadores o crear un partido.")
+    else:
+        # Reloj y Partido Superior
+        col_r1, col_r2, col_r3 = st.columns([3, 1, 1])
+        with col_r1:
+            opciones_partidos = df_p['id'].astype(str) + " - vs " + df_p['rival']
+            id_partido_actual = int(st.selectbox("Partido:", opciones_partidos, label_visibility="collapsed").split(" - ")[0])
+        with col_r2:
+            if not st.session_state.reloj_activo:
+                if st.button("▶️", use_container_width=True):
+                    st.session_state.reloj_activo = True
+                    st.session_state.inicio_tramo = time.time()
+                    st.rerun()
+            else:
+                if st.button("⏸️", use_container_width=True):
+                    st.session_state.reloj_activo = False
+                    st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo)
+                    st.rerun()
+        with col_r3:
+            st.markdown(f"### {calcular_minuto_actual()}'")
+
+        # Layout estilo Steazzi: Lateral izquierdo (Dorsales), Resto (Acción)
+        col_dorsal, col_centro = st.columns([1, 4])
+        
+        with col_dorsal:
+            # Lista vertical de solo números
+            for _, row in df_j.sort_values('dorsal').iterrows():
+                es_activo = (st.session_state.jugador_activo is not None and st.session_state.jugador_activo.get('id') == row['id'])
+                if st.button(f"{row['dorsal']}", key=f"dorsal_{row['id']}", use_container_width=True, type="primary" if es_activo else "secondary"):
+                    st.session_state.jugador_activo = row.to_dict()
+                    st.session_state.tmp_pista = ""
+                    st.session_state.tmp_porteria = ""
+                    st.rerun()
+                    
+        with col_centro:
+            # Info del jugador activo
+            if st.session_state.jugador_activo:
+                jug = st.session_state.jugador_activo
+                st.markdown(f"**{jug['dorsal']} - {jug['nombre']}** ({jug['posicion']})")
+                es_portero = jug['posicion'] == 'Portero'
+            else:
+                st.markdown("**Selecciona un dorsal 👈**")
+                es_portero = False
+
+            # Fila de los Pulgares (GOL / FALLO)
+            col_fallo, col_gol = st.columns(2)
+            with col_fallo:
+                if st.button("👎", use_container_width=True):
+                    registrar_accion_agil("Gol Encajado" if es_portero else "Tiro Fallado", id_partido_actual)
+                    st.rerun()
+            with col_gol:
+                if st.button("👍", use_container_width=True):
+                    registrar_accion_agil("Parada" if es_portero else "Gol", id_partido_actual)
+                    st.rerun()
+            
+            # IMAGEN CENTRAL (Rapidísima, sin redibujado de PIL)
+            try:
+                # Usamos la imagen original directamente para velocidad máxima
+                click = streamlit_image_coordinates("plantilla.jpg", key="mapa_rapido", use_column_width=True)
+                
+                # Detectar clics en la imagen de forma inteligente
+                if click:
+                    # El valor Y define si tocó arriba (portería) o abajo (pista)
+                    # Si tu imagen mide 800px de alto, la mitad es 400. Ajusta este número si hace falta.
+                    if click['y'] < 400:
+                        st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
+                    else:
+                        st.session_state.tmp_pista = f"{click['x']},{click['y']}"
+            except FileNotFoundError:
+                st.warning("⚠️ Falta 'plantilla.jpg'")
+
+            # Indicadores de selección textuales para no ralentizar la imagen
+            texto_pista = "🟢" if st.session_state.tmp_pista else "⚪"
+            texto_port = "🟢" if st.session_state.tmp_porteria else "⚪"
+            st.caption(f"{texto_pista} Pista seleccionada | {texto_port} Portería seleccionada")
+
+            # Botones Pop-Up inferiores
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                if st.button("Sanciones", use_container_width=True): menu_sanciones(id_partido_actual)
+            with col_b2:
+                if st.button("Ataque", use_container_width=True): menu_ataque(id_partido_actual)
+            with col_b3:
+                if st.button("Defensa", use_container_width=True): menu_defensa(id_partido_actual)
+
+
+# --- (Se mantienen las secciones de Plantilla, Partidos y Estadísticas ocultas en el menú lateral) ---
+
+elif menu == "2. Plantilla":
     st.subheader("Añadir Nuevo Jugador")
     col1, col2, col3 = st.columns(3)
     with col1: nombre = st.text_input("Nombre")
@@ -85,8 +213,7 @@ if menu == "1. Plantilla":
     df_j = obtener_datos("jugadores")
     if not df_j.empty: st.dataframe(df_j[['dorsal', 'nombre', 'posicion']].sort_values('dorsal'), use_container_width=True)
 
-# --- 2. PARTIDOS ---
-elif menu == "2. Partidos":
+elif menu == "3. Partidos":
     st.subheader("Crear Nuevo Partido")
     col1, col2 = st.columns(2)
     with col1: fecha = st.date_input("Fecha", datetime.today())
@@ -102,126 +229,6 @@ elif menu == "2. Partidos":
     df_p = obtener_datos("partidos")
     if not df_p.empty: st.dataframe(df_p, use_container_width=True)
 
-# --- 3. REGISTRO EN VIVO ---
-elif menu == "3. Registro en Vivo":
-    df_j = obtener_datos("jugadores")
-    df_p = obtener_datos("partidos")
-    
-    if df_j.empty or df_p.empty:
-        st.warning("Faltan jugadores o crear un partido.")
-    else:
-        opciones_partidos = df_p['id'].astype(str) + " - vs " + df_p['rival']
-        id_partido_actual = int(st.selectbox("📌 Partido actual:", opciones_partidos).split(" - ")[0])
-        
-        # RELOJ
-        col_reloj1, col_reloj2, col_reloj3 = st.columns([1,1,2])
-        with col_reloj1:
-            if not st.session_state.reloj_activo:
-                if st.button("▶️ Iniciar", use_container_width=True):
-                    st.session_state.reloj_activo = True
-                    st.session_state.inicio_tramo = time.time()
-                    st.rerun()
-            else:
-                if st.button("⏸️ Pausar", use_container_width=True):
-                    st.session_state.reloj_activo = False
-                    st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo)
-                    st.rerun()
-        with col_reloj2:
-            st.metric("Minuto", calcular_minuto_actual())
-        st.divider()
-
-        # PANTALLA PRINCIPAL
-        col_dorsales, col_accion = st.columns([1, 4])
-        
-        with col_dorsales:
-            st.markdown("### Jug.")
-            for _, row in df_j.sort_values('dorsal').iterrows():
-                tipo_btn = "primary" if st.session_state.jugador_activo is dict and st.session_state.jugador_activo.get('id') == row['id'] else "secondary"
-                if st.button(f"{row['dorsal']} - {row['nombre'][:3]}", key=f"btn_{row['id']}", use_container_width=True, type=tipo_btn):
-                    st.session_state.jugador_activo = row.to_dict()
-                    st.session_state.tmp_pista = ""
-                    st.session_state.tmp_porteria = ""
-                    st.rerun()
-
-        with col_accion:
-            if st.session_state.jugador_activo is None:
-                st.info("👈 Selecciona un jugador en el panel izquierdo.")
-            else:
-                jugador = st.session_state.jugador_activo
-                es_portero = jugador['posicion'] == 'Portero'
-                
-                st.markdown(f"#### Acción para: **{jugador['dorsal']} - {jugador['nombre']}**")
-                tab_tiro, tab_ataque, tab_def, tab_sanc = st.tabs(["🎯 Tiro/Portería", "⚔️ Ataque", "🛡️ Defensa", "🟥 Sanciones"])
-                
-                with tab_tiro:
-                    col_mapa, col_botones = st.columns([2, 1])
-                    with col_mapa:
-                        try:
-                            # --- NUEVA LÓGICA DE COLOR DE SELECCIÓN ---
-                            # Abrimos la imagen original
-                            img_base = Image.open("plantilla.jpg").convert("RGBA")
-                            # Creamos una capa transparente del mismo tamaño
-                            capa_color = Image.new('RGBA', img_base.size, (255, 255, 255, 0))
-                            draw_color = ImageDraw.Draw(capa_color)
-                            
-                            # Si hay clics guardados, dibujamos un resaltado amarillo
-                            radio = 35 # Tamaño de la zona coloreada
-                            color_resalte = (255, 215, 0, 160) # Amarillo Steazzi transparente
-                            
-                            if st.session_state.tmp_pista:
-                                xp, yp = map(int, st.session_state.tmp_pista.split(','))
-                                draw_color.ellipse((xp-radio, yp-radio, xp+radio, yp+radio), fill=color_resalte)
-                            if st.session_state.tmp_porteria:
-                                xg, yg = map(int, st.session_state.tmp_porteria.split(','))
-                                draw_color.ellipse((xg-radio, yg-radio, xg+radio, yg+radio), fill=color_resalte)
-                                
-                            # Mezclamos la imagen original con la capa de colores
-                            img_final = Image.alpha_composite(img_base, capa_color)
-                            
-                            # Mostramos la imagen interactiva que acabamos de colorear
-                            click = streamlit_image_coordinates(img_final, key="mapa_agil", width=350)
-                            
-                            # Procesamos el nuevo clic
-                            if click and click != st.session_state.ultimo_click:
-                                st.session_state.ultimo_click = click
-                                # Si toca por debajo de Y=400 es pista, si toca por encima es portería.
-                                # (Ajusta este 400 si la mitad de tu foto está más arriba o abajo)
-                                if click['y'] > 400: 
-                                    st.session_state.tmp_pista = f"{click['x']},{click['y']}"
-                                else:
-                                    st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
-                                st.rerun()
-                                
-                        except FileNotFoundError:
-                            st.warning("Falta 'plantilla.jpg'")
-                    
-                    with col_botones:
-                        st.write("Resultado:")
-                        if es_portero:
-                            if st.button("👍 Parada", type="primary", use_container_width=True): registrar_accion_agil("Parada", id_partido_actual)
-                            if st.button("👎 Gol Encajado", use_container_width=True): registrar_accion_agil("Gol Encajado", id_partido_actual)
-                        else:
-                            if st.button("👍 GOL", type="primary", use_container_width=True): registrar_accion_agil("Gol", id_partido_actual)
-                            if st.button("👎 Fallo / Guardado", use_container_width=True): registrar_accion_agil("Tiro Fallado", id_partido_actual)
-
-                # Resto de pestañas...
-                with tab_ataque:
-                    cols_a = st.columns(3)
-                    for i, acc in enumerate(["Pasos", "Doble regate", "Falta en ataque", "Pérdida de balón", "Falta", "Tiro bloqueado", "2 mins provocados", "7m provocado", "Duelo ganado"]):
-                        if cols_a[i % 3].button(acc, key=f"ataque_{i}", use_container_width=True): registrar_accion_agil(acc, id_partido_actual)
-
-                with tab_def:
-                    cols_d = st.columns(3)
-                    for i, acc in enumerate(["7m en contra", "Duelo perdido", "Falta", "Tiro bloqueado", "Falta en ataque", "Intercepción"]):
-                        if cols_d[i % 3].button(acc, key=f"def_{i}", use_container_width=True): registrar_accion_agil(acc, id_partido_actual)
-
-                with tab_sanc:
-                    col_s1, col_s2, col_s3 = st.columns(3)
-                    if col_s1.button("🟨 Amarilla", use_container_width=True): registrar_accion_agil("Amarilla", id_partido_actual)
-                    if col_s2.button("✌️ 2 Min", use_container_width=True): registrar_accion_agil("Exclusión 2 Min", id_partido_actual)
-                    if col_s3.button("🟥 Roja", type="primary", use_container_width=True): registrar_accion_agil("Tarjeta Roja", id_partido_actual)
-
-# --- 4. ESTADÍSTICAS ---
 elif menu == "4. Estadísticas":
     df_j = obtener_datos("jugadores")
     df_e = obtener_datos("eventos")
