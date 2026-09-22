@@ -9,55 +9,58 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS EXACTO PARA MÓVILES (ESTILO STEAZZI) ---
+# --- CSS AJUSTADO: ELIMINA HUECOS Y CORTE DE PANTALLA ---
 st.markdown("""
 <style>
-    /* 1. Evitar márgenes sobrantes en móviles */
+    /* Eliminar márgenes generales */
     .block-container {
-        padding: 0.5rem 0.2rem 1rem 0.2rem !important;
+        padding: 0.2rem 0.2rem 1rem 0.2rem !important;
         max-width: 100% !important;
     }
     
-    /* 2. Forzar que las dos columnas principales se mantengan una al lado de la otra */
-    div[data-testid="stHorizontalBlock"]:has(div.col-dorsales) {
+    /* Contenedor flexible para alinear dorsales y pista sin hueco central */
+    div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
     }
     
-    /* 3. Columna izquierda (Dorsales estrechos) */
-    div.col-dorsales {
-        width: 48px !important;
-        min-width: 48px !important;
-        max-width: 55px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 2px !important;
+    /* Columna izquierda (Dorsales pegados y compactos) */
+    div[data-testid="column"]:nth-of-type(1) {
+        flex: 0 0 52px !important;
+        width: 52px !important;
+        min-width: 52px !important;
+        max-width: 52px !important;
     }
     
-    /* Botones de dorsal pequeños y cuadrados */
-    div.col-dorsales button {
+    div[data-testid="column"]:nth-of-type(1) button {
         width: 100% !important;
-        min-height: 38px !important;
-        height: 38px !important;
+        min-height: 36px !important;
+        height: 36px !important;
         padding: 0px !important;
         font-weight: bold !important;
-        font-size: 16px !important;
+        font-size: 15px !important;
+        margin-bottom: 3px !important;
         border-radius: 6px !important;
     }
     
-    /* 4. Columna derecha (Acción y Pista) */
-    div.col-pista {
+    /* Columna derecha (Acción y Pista) ocupa todo el resto */
+    div[data-testid="column"]:nth-of-type(2) {
         flex: 1 1 auto !important;
-        width: calc(100% - 55px) !important;
-        overflow: hidden !important;
+        width: calc(100% - 58px) !important;
+        min-width: 0 !important;
     }
-
-    /* Pulgares más grandes y compactos */
-    div.col-pista button {
-        min-height: 42px !important;
-        font-size: 20px !important;
+    
+    /* Pulgares de resultado */
+    div[data-testid="column"]:nth-of-type(2) button {
+        min-height: 40px !important;
+        font-size: 18px !important;
+    }
+    
+    /* Asegurar que la imagen nunca desborde horizontalmente */
+    iframe, img {
+        max-width: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -129,55 +132,57 @@ def menu_defensa(id_partido):
     for acc in ["7m en contra", "Duelo perdido", "Falta", "Intercepción"]:
         if st.button(acc, use_container_width=True): registrar_accion_agil(acc, id_partido); st.rerun()
 
-# --- PANTALLA PRINCIPAL ---
-menu = st.sidebar.selectbox("Nav", ["1. Partido", "2. Plantilla", "3. Estadísticas"])
+# --- MENÚ LATERAL COMPLETO ---
+menu = st.sidebar.selectbox("Navegación", ["1. Registro en Vivo", "2. Partidos", "3. Plantilla", "4. Estadísticas"])
 
-if menu == "1. Partido":
+# --- 1. REGISTRO EN VIVO ---
+if menu == "1. Registro en Vivo":
     df_j = obtener_datos("jugadores")
     df_p = obtener_datos("partidos")
     
-    if not df_j.empty and not df_p.empty:
-        id_partido_actual = int(df_p['id'].iloc[-1])
-        
-        # Barra superior con marcador/reloj
-        c_r1, c_r2 = st.columns([1, 2])
-        with c_r1:
+    if df_j.empty or df_p.empty:
+        st.warning("⚠️ Debes añadir jugadores y crear al menos un partido desde el menú lateral.")
+    else:
+        # Fila superior compacta: Partido + Reloj
+        col_sup1, col_sup2, col_sup3 = st.columns([3, 1, 1])
+        with col_sup1:
+            opciones_partidos = df_p['id'].astype(str) + " - vs " + df_p['rival']
+            partido_sel = st.selectbox("Partido:", opciones_partidos, label_visibility="collapsed")
+            id_partido_actual = int(partido_sel.split(" - ")[0])
+        with col_sup2:
             if not st.session_state.reloj_activo:
-                if st.button("▶️ Iniciar", use_container_width=True): 
+                if st.button("▶️", use_container_width=True): 
                     st.session_state.reloj_activo = True; st.session_state.inicio_tramo = time.time(); st.rerun()
             else:
-                if st.button("⏸️ Pausa", use_container_width=True): 
+                if st.button("⏸️", use_container_width=True): 
                     st.session_state.reloj_activo = False; st.session_state.tiempo_acumulado += (time.time() - st.session_state.inicio_tramo); st.rerun()
-        with c_r2:
-            st.markdown(f"<div style='text-align: right; font-size: 20px; font-weight: bold;'>⏱️ Minuto: {calcular_minuto_actual()}'</div>", unsafe_allow_html=True)
+        with col_sup3:
+            st.markdown(f"<div style='font-size: 18px; font-weight: bold; text-align: center;'>{calcular_minuto_actual()}'</div>", unsafe_allow_html=True)
 
-        st.markdown("<hr style='margin: 4px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 3px 0;'>", unsafe_allow_html=True)
 
-        # DISTRIBUCIÓN HORIZONTAL BLOQUEADA
-        col_izq, col_der = st.columns([1, 6])
+        # DISTRIBUCIÓN HORIZONTAL ESTRICTA
+        col_izq, col_der = st.columns([1, 5])
         
+        # Columna Izquierda: Dorsales pegados
         with col_izq:
-            st.markdown('<div class="col-dorsales">', unsafe_allow_html=True)
             for _, row in df_j.sort_values('dorsal').iterrows():
                 es_activo = (st.session_state.jugador_activo is not None and st.session_state.jugador_activo.get('id') == row['id'])
                 if st.button(f"{row['dorsal']}", key=f"dor_{row['id']}", type="primary" if es_activo else "secondary"):
                     st.session_state.jugador_activo = row.to_dict()
                     st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
                     
+        # Columna Derecha: Información + Pulgares + Pista
         with col_der:
-            st.markdown('<div class="col-pista">', unsafe_allow_html=True)
-            
-            # Nombre del jugador seleccionado
             if st.session_state.jugador_activo:
                 jug = st.session_state.jugador_activo
-                st.markdown(f"<div style='font-size:14px; margin-bottom:4px;'>👤 <b>#{jug['dorsal']} {jug['nombre']}</b> ({jug['posicion']})</div>", unsafe_allow_html=True)
-                es_portero = jug['posicion'] == 'Portero'
+                st.markdown(f"<div style='font-size:13px; margin-bottom:2px;'><b>#{jug['dorsal']} {jug['nombre']}</b></div>", unsafe_allow_html=True)
+                es_portero = (jug['posicion'] == 'Portero')
             else:
-                st.markdown("<div style='font-size:13px; color:#aaa; margin-bottom:4px;'>👈 Pulsa un dorsal</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:12px; color:#888; margin-bottom:2px;'>👈 Elige dorsal</div>", unsafe_allow_html=True)
                 es_portero = False
 
-            # Botones de Gol / Fallo (Pulgares)
+            # Botones Pulgares
             c_mal, c_bien = st.columns(2)
             with c_mal:
                 if st.button("👎", use_container_width=True):
@@ -190,16 +195,16 @@ if menu == "1. Partido":
                         registrar_accion_agil("Parada" if es_portero else "Gol", id_partido_actual)
                         st.rerun()
             
-            # Imagen de la Pista (ocupando el ancho disponible)
+            # Imagen de Pista/Portería ajustada al ancho del contenedor
             try:
-                click = streamlit_image_coordinates("plantilla.jpg", key="mapa_movil", use_column_width=True)
+                click = streamlit_image_coordinates("plantilla.jpg", key="mapa_movil", width=290)
                 if click:
-                    if click['y'] < 400: st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
+                    if click['y'] < 350: st.session_state.tmp_porteria = f"{click['x']},{click['y']}"
                     else: st.session_state.tmp_pista = f"{click['x']},{click['y']}"
             except:
                 st.warning("Falta plantilla.jpg")
                 
-            # Acciones Rápidas (Pop-ups inferiores)
+            # Acciones Rápidas
             cb1, cb2, cb3 = st.columns(3)
             with cb1: 
                 if st.button("Sanc.", use_container_width=True): menu_sanciones(id_partido_actual)
@@ -207,27 +212,52 @@ if menu == "1. Partido":
                 if st.button("Ataq.", use_container_width=True): menu_ataque(id_partido_actual)
             with cb3: 
                 if st.button("Def.", use_container_width=True): menu_defensa(id_partido_actual)
-                
-            st.markdown('</div>', unsafe_allow_html=True)
 
-# Pestañas de soporte
-elif menu == "2. Plantilla":
-    st.subheader("Añadir Jugador")
-    nombre = st.text_input("Nombre")
-    dorsal = st.number_input("Dorsal", min_value=1, max_value=99)
-    posicion = st.selectbox("Posición", ["Portero", "Extremo Izq", "Lateral Izq", "Central", "Lateral Der", "Extremo Der", "Pivote"])
-    if st.button("Guardar"):
+# --- 2. PARTIDOS (RECUPERADO) ---
+elif menu == "2. Partidos":
+    st.subheader("Gestión de Partidos")
+    c_p1, c_p2 = st.columns(2)
+    with c_p1: fecha = st.date_input("Fecha", datetime.today())
+    with c_p2: rival = st.text_input("Rival")
+    if st.button("Crear Partido", type="primary"):
+        if rival:
+            df_p = obtener_datos("partidos")
+            nuevo_id_p = 1 if df_p.empty else int(df_p['id'].max()) + 1
+            sheet.worksheet("partidos").append_row([nuevo_id_p, str(fecha), rival])
+            st.cache_data.clear()
+            st.success(f"Partido vs {rival} creado.")
+            st.rerun()
+    st.divider()
+    df_p = obtener_datos("partidos")
+    if not df_p.empty: st.dataframe(df_p, use_container_width=True)
+
+# --- 3. PLANTILLA ---
+elif menu == "3. Plantilla":
+    st.subheader("Gestión de Plantilla")
+    c1, c2, c3 = st.columns(3)
+    with c1: nombre = st.text_input("Nombre")
+    with c2: dorsal = st.number_input("Dorsal", min_value=1, max_value=99)
+    with c3: posicion = st.selectbox("Posición", ["Portero", "Extremo Izq", "Lateral Izq", "Central", "Lateral Der", "Extremo Der", "Pivote"])
+    if st.button("Guardar Jugador", type="primary"):
         df_j = obtener_datos("jugadores")
         nuevo_id = 1 if df_j.empty else int(df_j['id'].max()) + 1
         sheet.worksheet("jugadores").append_row([nuevo_id, nombre, dorsal, posicion])
         st.cache_data.clear()
-        st.success("Guardado")
+        st.success("Jugador añadido.")
         st.rerun()
+    df_j = obtener_datos("jugadores")
+    if not df_j.empty: st.dataframe(df_j[['dorsal', 'nombre', 'posicion']].sort_values('dorsal'), use_container_width=True)
 
-elif menu == "3. Estadísticas":
+# --- 4. ESTADÍSTICAS ---
+elif menu == "4. Estadísticas":
     df_j = obtener_datos("jugadores")
     df_e = obtener_datos("eventos")
-    if not df_e.empty and not df_j.empty:
-        df_merged = pd.merge(df_e, df_j, left_on='jugador_id', right_on='id')
-        resumen = df_merged.groupby(['dorsal', 'nombre', 'accion']).size().reset_index(name='total')
-        st.dataframe(resumen.pivot(index=['dorsal', 'nombre'], columns='accion', values='total').fillna(0).astype(int), use_container_width=True)
+    df_p = obtener_datos("partidos")
+    if not df_e.empty and not df_j.empty and not df_p.empty:
+        filtro_sel = st.selectbox("Ver:", ["🏆 Acumulado"] + list(df_p['id'].astype(str) + " - vs " + df_p['rival']))
+        if "Acumulado" not in filtro_sel:
+            df_e = df_e[df_e['id_partido'] == int(filtro_sel.split(" - ")[0])]
+        if not df_e.empty:
+            df_merged = pd.merge(df_e, df_j, left_on='jugador_id', right_on='id')
+            resumen = df_merged.groupby(['dorsal', 'nombre', 'accion']).size().reset_index(name='total')
+            st.dataframe(resumen.pivot(index=['dorsal', 'nombre'], columns='accion', values='total').fillna(0).astype(int), use_container_width=True)
