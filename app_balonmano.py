@@ -9,16 +9,20 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# --- DIMENSIONES BASE ---
-ANCHO_DORSAL = 46        # Ancho fijo columna izquierda
-ANCHO_CAMPO_PX = 230     # Ancho fijo del lienzo para evitar desbordamiento
-UMBRAL_PORTERIA_REL = 0.44  # Fracción vertical: < 44% es portería, >= 44% es pista
+# --- DIMENSIONES Y LÍMITES ---
+ANCHO_DORSAL = 58        # Ancho fijo columna dorsales
+ANCHO_CAMPO_PX = 250     # Ancho seguro para la imagen sin desbordar pantallas móviles
+ALTO_CABECERA = 78       # Altura reservada superior
+UMBRAL_PORTERIA_REL = 0.44  # Fracción vertical: < 44% portería, >= 44% pista
 
 CSS = """
 <style>
+    /* Bloqueo total de desplazamiento horizontal en el móvil */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
         overflow-x: hidden !important;
         max-width: 100vw !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     header { display: none !important; }
     footer { display: none !important; }
@@ -26,31 +30,32 @@ CSS = """
     .block-container {
         padding: 0.3rem 0.2rem 0.4rem 0.2rem !important;
         max-width: 100vw !important;
+        overflow-x: hidden !important;
     }
 
-    /* Contenedor principal */
+    /* Panel de registro centrado y sin desbordar */
     .st-key-registro {
         max-width: 100vw !important;
         margin: 0 auto !important;
         overflow-x: hidden !important;
     }
 
-    /* Filas horizontales fijas: desactiva el wrap nativo de Streamlit en móviles */
+    /* Filas horizontales fijas: desactiva el wrap nativo de Streamlit */
     .st-key-registro [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 4px !important;
+        gap: 6px !important;
         align-items: flex-start !important;
     }
 
-    /* Anulación universal de min-width de columnas */
+    /* Anulación universal de min-width para columnas */
     .st-key-registro [data-testid="stColumn"],
     .st-key-registro [data-testid="column"] {
         min-width: 0 !important;
     }
 
-    /* Fila principal: selección por posición (compatible con todos los navegadores) */
+    /* Fila principal: selección posicional compatible con cualquier navegador */
     .st-key-registro > div[data-testid="stHorizontalBlock"] > div:first-child {
         flex: 0 0 __DORSAL__px !important;
         width: __DORSAL__px !important;
@@ -65,7 +70,7 @@ CSS = """
     /* Cabecera superior */
     .st-key-cabecera [data-testid="stHorizontalBlock"] {
         align-items: center !important;
-        gap: 3px !important;
+        gap: 4px !important;
     }
     .st-key-cabecera [data-testid="stColumn"]:first-child,
     .st-key-cabecera [data-testid="column"]:first-child {
@@ -73,18 +78,19 @@ CSS = """
     }
     .st-key-cabecera [data-testid="stColumn"]:not(:first-child),
     .st-key-cabecera [data-testid="column"]:not(:first-child) {
-        flex: 0 0 38px !important;
-        width: 38px !important;
+        flex: 0 0 40px !important;
+        width: 40px !important;
     }
     .st-key-cabecera button {
         padding: 0 !important;
-        min-height: 36px !important;
-        height: 36px !important;
+        min-height: 38px !important;
+        height: 38px !important;
     }
 
-    /* Lista vertical de dorsales */
+    /* Lista vertical de dorsales con scroll completo */
     .st-key-dorsales {
-        max-height: 84vh !important;
+        max-height: calc(100vh - __TOP__px) !important;
+        max-height: calc(100dvh - __TOP__px) !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         display: flex !important;
@@ -94,15 +100,15 @@ CSS = """
     }
     .st-key-dorsales button {
         width: 100% !important;
-        height: 36px !important;
-        min-height: 36px !important;
+        height: 40px !important;
+        min-height: 40px !important;
         padding: 0 !important;
         font-weight: bold !important;
-        font-size: 15px !important;
+        font-size: 17px !important;
         border-radius: 6px !important;
     }
 
-    /* Porteros en amarillo */
+    /* PORTEROS EN AMARILLO */
     div[class*="st-key-portero_"] button {
         background-color: #facc15 !important;
         color: #000000 !important;
@@ -126,17 +132,17 @@ CSS = """
     .banner-jugador.activo { background-color: #1e3a8a; color: #ffffff; border: 1px solid #3b82f6; }
     .banner-jugador.inactivo { background-color: #1f2937; color: #9ca3af; border: 1px dashed #374151; }
 
-    .st-key-campo { gap: 3px !important; }
+    .st-key-campo { gap: 4px !important; }
     .st-key-registro [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
 
-    /* Pulgares */
+    /* Pulgares más altos y visibles */
     .st-key-pulgares [data-testid="stHorizontalBlock"] { gap: 4px !important; margin-bottom: 2px !important; }
     .st-key-pulgares [data-testid="stColumn"],
     .st-key-pulgares [data-testid="column"] { flex: 1 1 50% !important; width: 50% !important; }
     .st-key-pulgares button {
-        height: 42px !important;
-        min-height: 42px !important;
-        font-size: 22px !important;
+        height: 44px !important;
+        min-height: 44px !important;
+        font-size: 26px !important;
         padding: 0 !important;
     }
 
@@ -145,14 +151,14 @@ CSS = """
     .st-key-acciones [data-testid="stColumn"],
     .st-key-acciones [data-testid="column"] { flex: 1 1 33.33% !important; width: 33.33% !important; }
     .st-key-acciones button {
-        height: 36px !important;
-        min-height: 36px !important;
-        font-size: 12px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        font-size: 13px !important;
         font-weight: 600 !important;
         padding: 0 !important;
     }
 
-    /* Iframe del mapa */
+    /* Iframe de la pista contenido */
     .st-key-campo iframe {
         border-radius: 6px !important;
         display: block !important;
@@ -162,7 +168,7 @@ CSS = """
 </style>
 """
 
-st.markdown(CSS.replace("__CAMPO__", str(ANCHO_CAMPO_PX)).replace("__DORSAL__", str(ANCHO_DORSAL)), unsafe_allow_html=True)
+st.markdown(CSS.replace("__CAMPO__", str(ANCHO_CAMPO_PX)).replace("__DORSAL__", str(ANCHO_DORSAL)).replace("__TOP__", str(ALTO_CABECERA)), unsafe_allow_html=True)
 
 # --- ESTADO (SESSION STATE) ---
 if 'seccion_actual' not in st.session_state: st.session_state.seccion_actual = "1. Registro en Vivo"
@@ -214,7 +220,7 @@ def registrar_accion_agil(accion, id_partido):
     st.session_state.tmp_porteria = ""
     st.toast(f"✅ Guardado: {accion}", icon="✅")
 
-# --- MENÚ DE NAVEGACIÓN HAMBURGUESA ---
+# --- MENÚ HAMBURGUESA ---
 @st.dialog("Navegación")
 def abrir_menu_navegacion():
     opciones = [
@@ -257,7 +263,7 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
         if st.button("Abrir Menú"): abrir_menu_navegacion()
     else:
         with st.container(key="registro"):
-            # Barra superior
+            # Cabecera superior compacta
             with st.container(key="cabecera"):
                 c_sup1, c_sup2, c_sup3, c_sup4 = st.columns([3.5, 1.2, 1.2, 1.1])
                 with c_sup1:
@@ -284,7 +290,7 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
 
             st.markdown("<hr style='margin: 2px 0 4px 0;'>", unsafe_allow_html=True)
 
-            # Fila principal (dorsales + controles)
+            # Fila principal (Dorsales | Campo)
             c_izq, c_der = st.columns([1, 4])
 
             with c_izq:
@@ -324,7 +330,7 @@ if st.session_state.seccion_actual == "1. Registro en Vivo":
                                     registrar_accion_agil("Parada" if es_portero_activo else "Gol", id_partido_actual)
                                     st.rerun()
 
-                    # Imagen con coordenadas relativas porcentuales (0-100%)
+                    # Imagen contenida con cálculo porcentual (0 - 100%)
                     try:
                         click = streamlit_image_coordinates("plantilla.jpg", key="mapa_click", width=ANCHO_CAMPO_PX)
                         if click and click.get('width') and click.get('height'):
