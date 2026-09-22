@@ -9,10 +9,10 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# Anchos optimizados para ocupar el alto y ancho completo del viewport móvil
+# Anchos fijos en píxeles
 ANCHO_IMG = 290
-ANCHO_DORSAL = 56
-UMBRAL_PORTERIA_Y = 380  # Umbral escalado para la altura proporcional de 290px
+ANCHO_DORSAL = 64
+UMBRAL_PORTERIA_Y = 380
 
 CSS = """
 <style>
@@ -20,7 +20,7 @@ CSS = """
     footer { display: none !important; }
 
     .block-container {
-        padding: 0.1rem 0.2rem 0.2rem 0.2rem !important;
+        padding: 0.15rem 0.2rem 0.2rem 0.2rem !important;
         max-width: 100vw !important;
     }
 
@@ -39,27 +39,23 @@ CSS = """
         align-items: flex-start !important;
     }
 
-    .st-key-registro [data-testid="stColumn"],
-    .st-key-registro [data-testid="column"] {
-        min-width: 0 !important;
-        width: auto !important;
-    }
-
-    /* Columna de dorsales (más ancha) */
-    .st-key-registro [data-testid="stColumn"]:has(.st-key-dorsales),
-    .st-key-registro [data-testid="column"]:has(.st-key-dorsales) {
+    /* 1. Columna izquierda (Dorsales) fija a 64px sin depender de :has() */
+    .st-key-registro > div[data-testid="stHorizontalBlock"] > div:first-child {
         flex: 0 0 __DORSAL__px !important;
+        min-width: __DORSAL__px !important;
         max-width: __DORSAL__px !important;
+        width: __DORSAL__px !important;
     }
 
-    /* Columna del campo */
-    .st-key-registro [data-testid="stColumn"]:has(.st-key-campo),
-    .st-key-registro [data-testid="column"]:has(.st-key-campo) {
+    /* 2. Columna derecha (Campo y controles) */
+    .st-key-registro > div[data-testid="stHorizontalBlock"] > div:last-child {
         flex: 0 0 __IMG__px !important;
+        min-width: __IMG__px !important;
         max-width: __IMG__px !important;
+        width: __IMG__px !important;
     }
 
-    /* Lista vertical de dorsales con scroll completo */
+    /* Lista vertical de dorsales con scroll */
     .st-key-dorsales {
         max-height: 86vh !important;
         overflow-y: auto !important;
@@ -68,33 +64,46 @@ CSS = """
         flex-direction: column !important;
         gap: 4px !important;
     }
-    
+
+    /* Botones de jugadores estándar */
     .st-key-dorsales button {
         width: 100% !important;
-        height: 38px !important;
-        min-height: 38px !important;
+        height: 40px !important;
+        min-height: 40px !important;
         padding: 0 !important;
         font-weight: bold !important;
-        font-size: 16px !important;
+        font-size: 17px !important;
         border-radius: 6px !important;
     }
 
-    /* BOTONES DE PORTEROS EN AMARILLO */
-    .btn-portero button {
-        background-color: #f1c40f !important;
-        color: #111111 !important;
-        border: 2px solid #d4ac0d !important;
-    }
-    .btn-portero button:hover {
-        background-color: #f39c12 !important;
-        color: #ffffff !important;
+    /* PORTEROS: AMARILLO INTENSO CON TEXTO OSCURO */
+    .st-key-portero button {
+        background-color: #facc15 !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+        border: 2px solid #ca8a04 !important;
     }
 
-    /* Contenedor del campo */
-    .st-key-campo {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 4px !important;
+    /* Banner informativo del jugador: espacio reservado sin solapamiento */
+    .banner-jugador {
+        width: 100%;
+        text-align: center;
+        font-size: 13px;
+        font-weight: bold;
+        padding: 6px 4px;
+        margin-bottom: 6px;
+        border-radius: 6px;
+        box-sizing: border-box;
+    }
+    .banner-jugador.activo {
+        background-color: #1e3a8a;
+        color: #ffffff;
+        border: 1px solid #3b82f6;
+    }
+    .banner-jugador.inactivo {
+        background-color: #1f2937;
+        color: #9ca3af;
+        border: 1px dashed #374151;
     }
 
     /* Pulgares: 2 columnas fijas en fila */
@@ -103,16 +112,18 @@ CSS = """
         flex-direction: row !important;
         gap: 6px !important;
         width: 100% !important;
+        margin-bottom: 4px !important;
     }
     .st-key-pulgares [data-testid="stColumn"],
     .st-key-pulgares [data-testid="column"] {
         flex: 1 1 50% !important;
         width: 50% !important;
+        min-width: 0 !important;
     }
     .st-key-pulgares button {
         width: 100% !important;
-        height: 48px !important;
-        min-height: 48px !important;
+        height: 46px !important;
+        min-height: 46px !important;
         font-size: 24px !important;
         padding: 0 !important;
     }
@@ -123,11 +134,13 @@ CSS = """
         flex-direction: row !important;
         gap: 4px !important;
         width: 100% !important;
+        margin-top: 4px !important;
     }
     .st-key-acciones [data-testid="stColumn"],
     .st-key-acciones [data-testid="column"] {
         flex: 1 1 33.33% !important;
         width: 33.33% !important;
+        min-width: 0 !important;
     }
     .st-key-acciones button {
         width: 100% !important;
@@ -138,7 +151,7 @@ CSS = """
         padding: 0 !important;
     }
 
-    /* Iframe de la imagen escalado proporcionalmente */
+    /* Iframe de la imagen */
     .st-key-campo iframe {
         border-radius: 8px !important;
         display: block !important;
@@ -247,7 +260,7 @@ if menu == "1. Registro en Vivo":
                 st.markdown(f"<div style='font-size:16px; font-weight:bold; line-height:36px; text-align:center;'>{calcular_minuto_actual()}'</div>",
                             unsafe_allow_html=True)
 
-            st.markdown("<hr style='margin: 2px 0 4px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 2px 0 6px 0;'>", unsafe_allow_html=True)
 
             # Bloque principal: dorsales | campo
             c_izq, c_der = st.columns([1, 5])
@@ -257,44 +270,39 @@ if menu == "1. Registro en Vivo":
                     for _, row in df_j.sort_values('dorsal').iterrows():
                         es_activo = (st.session_state.jugador_activo and
                                      st.session_state.jugador_activo.get('id') == row['id'])
-                        es_portero_btn = (row['posicion'] == 'Portero')
+                        es_portero = (row['posicion'] == 'Portero')
                         
-                        # Si es portero, se envuelve en la clase CSS amarilla
-                        if es_portero_btn:
-                            st.markdown('<div class="btn-portero">', unsafe_allow_html=True)
-                            
-                        if st.button(f"{row['dorsal']}", key=f"d_{row['id']}",
-                                     type="primary" if es_activo else "secondary"):
-                            st.session_state.jugador_activo = row.to_dict()
-                            st.rerun()
-                            
-                        if es_portero_btn:
-                            st.markdown('</div>', unsafe_allow_html=True)
+                        # Si es portero, se usa key="portero" para que reciba el color amarillo
+                        contenedor_key = "portero" if es_portero else "jugador"
+                        with st.container(key=contenedor_key):
+                            if st.button(f"{row['dorsal']}", key=f"d_{row['id']}",
+                                         type="primary" if es_activo else "secondary"):
+                                st.session_state.jugador_activo = row.to_dict()
+                                st.rerun()
 
             with c_der:
                 with st.container(key="campo"):
+                    # Tarjeta informativa del jugador (sin riesgo de solapamiento)
                     if st.session_state.jugador_activo:
                         j = st.session_state.jugador_activo
-                        st.markdown(f"<div style='font-size:13px; font-weight:bold; text-align:center;'>#{j['dorsal']} {j['nombre']} ({j['posicion']})</div>",
-                                    unsafe_allow_html=True)
-                        es_portero = (j['posicion'] == 'Portero')
+                        es_portero_activo = (j['posicion'] == 'Portero')
+                        st.markdown(f'<div class="banner-jugador activo">#{j["dorsal"]} {j["nombre"]} ({j["posicion"]})</div>', unsafe_allow_html=True)
                     else:
-                        st.markdown("<div style='font-size:12px; color:#888; text-align:center;'>👈 Elige dorsal</div>",
-                                    unsafe_allow_html=True)
-                        es_portero = False
+                        es_portero_activo = False
+                        st.markdown('<div class="banner-jugador inactivo">👈 Elige un dorsal</div>', unsafe_allow_html=True)
 
-                    # Fila de pulgares (2 columnas forzadas)
+                    # Fila de pulgares
                     with st.container(key="pulgares"):
                         cp1, cp2 = st.columns(2)
                         with cp1:
                             if st.button("👎", use_container_width=True):
                                 if st.session_state.jugador_activo:
-                                    registrar_accion_agil("Gol Encajado" if es_portero else "Tiro Fallado", id_partido_actual)
+                                    registrar_accion_agil("Gol Encajado" if es_portero_activo else "Tiro Fallado", id_partido_actual)
                                     st.rerun()
                         with cp2:
                             if st.button("👍", use_container_width=True):
                                 if st.session_state.jugador_activo:
-                                    registrar_accion_agil("Parada" if es_portero else "Gol", id_partido_actual)
+                                    registrar_accion_agil("Parada" if es_portero_activo else "Gol", id_partido_actual)
                                     st.rerun()
 
                     # Imagen del campo dimensionada a 290px
@@ -308,7 +316,7 @@ if menu == "1. Registro en Vivo":
                     except Exception:
                         st.warning("Falta plantilla.jpg")
 
-                    # Fila de acciones (3 columnas forzadas)
+                    # Fila de acciones
                     with st.container(key="acciones"):
                         ca1, ca2, ca3 = st.columns(3)
                         with ca1:
