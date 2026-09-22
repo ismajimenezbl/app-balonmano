@@ -9,7 +9,6 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 
 st.set_page_config(page_title="Stats Balonmano", layout="wide", initial_sidebar_state="collapsed")
 
-# Anchos fijos en píxeles
 ANCHO_IMG = 290
 ANCHO_DORSAL = 64
 UMBRAL_PORTERIA_Y = 380
@@ -24,13 +23,11 @@ CSS = """
         max-width: 100vw !important;
     }
 
-    /* Contenedor global centrado */
     .st-key-registro {
         max-width: calc(__DORSAL__px + 8px + __IMG__px) !important;
         margin: 0 auto !important;
     }
 
-    /* Filas horizontales fijas: sin apilar en móvil */
     .st-key-registro [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -39,7 +36,6 @@ CSS = """
         align-items: flex-start !important;
     }
 
-    /* 1. Columna izquierda (Dorsales) fija a 64px sin depender de :has() */
     .st-key-registro > div[data-testid="stHorizontalBlock"] > div:first-child {
         flex: 0 0 __DORSAL__px !important;
         min-width: __DORSAL__px !important;
@@ -47,7 +43,6 @@ CSS = """
         width: __DORSAL__px !important;
     }
 
-    /* 2. Columna derecha (Campo y controles) */
     .st-key-registro > div[data-testid="stHorizontalBlock"] > div:last-child {
         flex: 0 0 __IMG__px !important;
         min-width: __IMG__px !important;
@@ -55,7 +50,6 @@ CSS = """
         width: __IMG__px !important;
     }
 
-    /* Lista vertical de dorsales con scroll */
     .st-key-dorsales {
         max-height: 86vh !important;
         overflow-y: auto !important;
@@ -65,7 +59,6 @@ CSS = """
         gap: 4px !important;
     }
 
-    /* Botones de jugadores estándar */
     .st-key-dorsales button {
         width: 100% !important;
         height: 40px !important;
@@ -76,15 +69,14 @@ CSS = """
         border-radius: 6px !important;
     }
 
-    /* PORTEROS: AMARILLO INTENSO CON TEXTO OSCURO */
-    .st-key-portero button {
+    /* ESTILO AMARILLO PARA TODOS LOS CONTENEDORES DE PORTEROS */
+    div[class*="st-key-portero_"] button {
         background-color: #facc15 !important;
         color: #000000 !important;
         font-weight: 900 !important;
         border: 2px solid #ca8a04 !important;
     }
 
-    /* Banner informativo del jugador: espacio reservado sin solapamiento */
     .banner-jugador {
         width: 100%;
         text-align: center;
@@ -106,7 +98,6 @@ CSS = """
         border: 1px dashed #374151;
     }
 
-    /* Pulgares: 2 columnas fijas en fila */
     .st-key-pulgares [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -128,7 +119,6 @@ CSS = """
         padding: 0 !important;
     }
 
-    /* Acciones: 3 columnas fijas en fila */
     .st-key-acciones [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
@@ -151,7 +141,6 @@ CSS = """
         padding: 0 !important;
     }
 
-    /* Iframe de la imagen */
     .st-key-campo iframe {
         border-radius: 8px !important;
         display: block !important;
@@ -241,7 +230,6 @@ if menu == "1. Registro en Vivo":
         st.warning("⚠️ Añade plantilla y partidos desde el menú lateral.")
     else:
         with st.container(key="registro"):
-            # Cabecera superior compacta
             c_sup1, c_sup2, c_sup3 = st.columns([3, 1, 1])
             with c_sup1:
                 id_partido_actual = int(st.selectbox(
@@ -262,7 +250,6 @@ if menu == "1. Registro en Vivo":
 
             st.markdown("<hr style='margin: 2px 0 6px 0;'>", unsafe_allow_html=True)
 
-            # Bloque principal: dorsales | campo
             c_izq, c_der = st.columns([1, 5])
 
             with c_izq:
@@ -272,9 +259,9 @@ if menu == "1. Registro en Vivo":
                                      st.session_state.jugador_activo.get('id') == row['id'])
                         es_portero = (row['posicion'] == 'Portero')
                         
-                        # Si es portero, se usa key="portero" para que reciba el color amarillo
-                        contenedor_key = "portero" if es_portero else "jugador"
-                        with st.container(key=contenedor_key):
+                        # Clave única obligatoria por jugador
+                        prefijo = "portero" if es_portero else "jugador"
+                        with st.container(key=f"{prefijo}_{row['id']}"):
                             if st.button(f"{row['dorsal']}", key=f"d_{row['id']}",
                                          type="primary" if es_activo else "secondary"):
                                 st.session_state.jugador_activo = row.to_dict()
@@ -282,7 +269,6 @@ if menu == "1. Registro en Vivo":
 
             with c_der:
                 with st.container(key="campo"):
-                    # Tarjeta informativa del jugador (sin riesgo de solapamiento)
                     if st.session_state.jugador_activo:
                         j = st.session_state.jugador_activo
                         es_portero_activo = (j['posicion'] == 'Portero')
@@ -291,7 +277,6 @@ if menu == "1. Registro en Vivo":
                         es_portero_activo = False
                         st.markdown('<div class="banner-jugador inactivo">👈 Elige un dorsal</div>', unsafe_allow_html=True)
 
-                    # Fila de pulgares
                     with st.container(key="pulgares"):
                         cp1, cp2 = st.columns(2)
                         with cp1:
@@ -305,7 +290,6 @@ if menu == "1. Registro en Vivo":
                                     registrar_accion_agil("Parada" if es_portero_activo else "Gol", id_partido_actual)
                                     st.rerun()
 
-                    # Imagen del campo dimensionada a 290px
                     try:
                         click = streamlit_image_coordinates("plantilla.jpg", key="mapa_click", width=ANCHO_IMG)
                         if click:
@@ -316,7 +300,6 @@ if menu == "1. Registro en Vivo":
                     except Exception:
                         st.warning("Falta plantilla.jpg")
 
-                    # Fila de acciones
                     with st.container(key="acciones"):
                         ca1, ca2, ca3 = st.columns(3)
                         with ca1:
